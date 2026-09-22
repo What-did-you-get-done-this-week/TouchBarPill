@@ -11,6 +11,20 @@
 "Open at Login (approval needed)" = "Open at Login (approval needed)";
 "TouchBarPill — click to quit" = "TouchBarPill — click to quit";
 
+/* Focus hub */
+"Focus" = "Focus";
+"Focus Goal" = "Focus Goal";
+"Reset Focus" = "Reset Focus";
+"Goal: Off" = "Goal: Off";
+"Goal: 25 min" = "Goal: 25 min";
+"Goal: 50 min" = "Goal: 50 min";
+"Off" = "Off";
+"25 min" = "25 min";
+"50 min" = "50 min";
+"Done" = "Done";
+"Paused" = "Paused";
+"Click the collapsed notch to start or pause a focus timer. Goal Off means no done state. 25 or 50 minutes show Done gently on the notch. Default goal is Off." = "Click the collapsed notch to start or pause a focus timer. Goal Off means no done state. 25 or 50 minutes show Done gently on the notch. Default goal is Off.";
+
 /* Preferences */
 "TouchBarPill Preferences" = "TouchBarPill Preferences";
 "A black tab sits on the top edge of the screen. Hover it to open the live adaptive Touch Bar, then move away and it folds back into the tab." = "A black tab sits on the top edge of the screen. Hover it to open the live adaptive Touch Bar, then move away and it folds back into the tab.";
@@ -49,6 +63,7 @@
 "Idle opacity" = "Idle opacity";
 "none" = "none";
 "A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned." = "A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned.";
+"A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. Click the collapsed notch to start or pause Focus. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned." = "A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. Click the collapsed notch to start or pause Focus. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned.";
 "The notch and the expanded strip use the edge you choose on this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns." = "The notch and the expanded strip use the edge you choose on this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns.";
 "That display is unplugged. Showing the built-in display, or the main display, until it is back. The choice is remembered." = "That display is unplugged. Showing the built-in display, or the main display, until it is back. The choice is remembered.";
 "Drag the collapsed notch along its attached edge. Top center, Bottom center, Left mid, and Right mid park it on that display. The expanded strip follows the same edge and stays on screen." = "Drag the collapsed notch along its attached edge. Top center, Bottom center, Left mid, and Right mid park it on that display. The expanded strip follows the same edge and stays on screen.";

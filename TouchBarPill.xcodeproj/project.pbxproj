@@ -16,6 +16,8 @@
 		A10000000000000000000036 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002A /* L10n.swift */; };
 		A10000000000000000000037 /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002B /* LaunchAtLogin.swift */; };
 		A10000000000000000000038 /* Placement.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002C /* Placement.swift */; };
+		A10000000000000000000039 /* FocusSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002D /* FocusSession.swift */; };
+		A1000000000000000000003A /* FullscreenWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000002E /* FullscreenWatcher.swift */; };
 		A10000000000000000000053 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000050 /* Localizable.strings */; };
 		A10000000000000000000041 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000040 /* AppKit.framework */; };
 		A10000000000000000000043 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000042 /* QuartzCore.framework */; };
@@ -39,6 +41,8 @@
 		A1000000000000000000002A /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
 		A1000000000000000000002B /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
 		A1000000000000000000002C /* Placement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Placement.swift; sourceTree = "<group>"; };
+		A1000000000000000000002D /* FocusSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusSession.swift; sourceTree = "<group>"; };
+		A1000000000000000000002E /* FullscreenWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenWatcher.swift; sourceTree = "<group>"; };
 		A10000000000000000000051 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		A10000000000000000000052 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/Localizable.strings; sourceTree = "<group>"; };
 		A10000000000000000000040 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
@@ -96,6 +100,8 @@
 				A1000000000000000000002A /* L10n.swift */,
 				A1000000000000000000002B /* LaunchAtLogin.swift */,
 				A1000000000000000000002C /* Placement.swift */,
+				A1000000000000000000002D /* FocusSession.swift */,
+				A1000000000000000000002E /* FullscreenWatcher.swift */,
 				A10000000000000000000050 /* Localizable.strings */,
 				A10000000000000000000025 /* DFRMirror.m */,
 				A10000000000000000000026 /* DFRMirror.h */,
@@ -205,6 +211,8 @@
 				A10000000000000000000036 /* L10n.swift in Sources */,
 				A10000000000000000000037 /* LaunchAtLogin.swift in Sources */,
 				A10000000000000000000038 /* Placement.swift in Sources */,
+				A10000000000000000000039 /* FocusSession.swift in Sources */,
+				A1000000000000000000003A /* FullscreenWatcher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -316,7 +324,7 @@
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = NO;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXECUTABLE_NAME = "$(PRODUCT_NAME)";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -326,7 +334,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.touchbarpill.TouchBarPill;
 				PRODUCT_BUNDLE_PACKAGE_TYPE = APPL;
 				PRODUCT_MODULE_NAME = TouchBarPill;
@@ -348,7 +356,7 @@
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = NO;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXECUTABLE_NAME = "$(PRODUCT_NAME)";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -358,7 +366,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.touchbarpill.TouchBarPill;
 				PRODUCT_BUNDLE_PACKAGE_TYPE = APPL;
 				PRODUCT_MODULE_NAME = TouchBarPill;

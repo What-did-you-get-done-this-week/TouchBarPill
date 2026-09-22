@@ -77,7 +77,10 @@ final class PillPanelController: NSObject {
     private var collapseItem: DispatchWorkItem?
     private var expandItem: DispatchWorkItem?
     private var discreetItem: DispatchWorkItem?
+    private var fullscreenHideItem: DispatchWorkItem?
     private var chromeGeneration = 0
+    /// Fullscreen: notch is near-invisible but still hittable until hover.
+    private var fullscreenConcealed = false
 
     var isVisible: Bool { panel.isVisible }
 
@@ -134,6 +137,19 @@ final class PillPanelController: NSObject {
             name: PillPlacement.didChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(focusChanged),
+            name: FocusSession.didChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(fullscreenChanged),
+            name: FullscreenWatcher.didChange,
+            object: nil
+        )
+        root.refreshFocusChrome()
     }
 
     deinit {
@@ -157,6 +173,7 @@ final class PillPanelController: NSObject {
             pointerEntered()
         } else {
             refreshChromeOpacity(animated: false)
+            scheduleFullscreenConcealIfNeeded()
         }
     }
 
@@ -219,8 +236,14 @@ final class PillPanelController: NSObject {
         collapseItem?.cancel()
         discreetItem?.cancel()
         discreetItem = nil
+        fullscreenHideItem?.cancel()
+        fullscreenHideItem = nil
+        if fullscreenConcealed {
+            setFullscreenConcealed(false, animated: true)
+        }
         setOpacity(1, animated: true)
         root.refreshPinChrome()
+        root.refreshFocusChrome()
         guard !expanded, !dragging else { return }
         // A short delay lets a press-and-drag park the tab. A plain hover
         // still opens it. The drag loop runs in event-tracking mode, so this
@@ -245,15 +268,29 @@ final class PillPanelController: NSObject {
         expandItem = nil
     }
 
+    /// Click on the collapsed notch toggles the focus timer. It does not expand.
+    /// Hover (after a short delay) still expands the Touch Bar stream.
     private func clickCollapsed() {
-        hovering = true
+        guard !expanded else { return }
         expandItem?.cancel()
         expandItem = nil
         discreetItem?.cancel()
         discreetItem = nil
+        fullscreenHideItem?.cancel()
+        fullscreenHideItem = nil
+        // Reveal if fullscreen-concealed so the timer label is readable.
+        if fullscreenConcealed {
+            setFullscreenConcealed(false, animated: true)
+        }
         setOpacity(1, animated: false)
-        guard !expanded else { return }
-        setExpanded(true)
+        FocusSession.shared.toggleFromClick()
+        root.refreshFocusChrome()
+        // Stay collapsed; hover continues to own expand.
+        if hovering {
+            refreshChromeOpacity(animated: true)
+        } else {
+            refreshChromeOpacity(animated: true)
+        }
     }
 
     private func pointerExited() {
@@ -270,6 +307,7 @@ final class PillPanelController: NSObject {
         root.refreshPinChrome()
         guard expanded else {
             refreshChromeOpacity(animated: true)
+            scheduleFullscreenConcealIfNeeded()
             return
         }
         // Pinned stays open. The pointer can leave.
@@ -333,7 +371,11 @@ final class PillPanelController: NSObject {
                 self.root.apply(mirror: self.mirror, expanded: false)
             }
             self.root.refreshPinChrome()
+            self.root.refreshFocusChrome()
             self.refreshChromeOpacity(animated: true)
+            if !expanding {
+                self.scheduleFullscreenConcealIfNeeded()
+            }
         }
     }
 
@@ -349,6 +391,63 @@ final class PillPanelController: NSObject {
     @objc private func placementChanged() {
         applyPlacementChange()
     }
+
+    @objc private func focusChanged() {
+        root.refreshFocusChrome()
+    }
+
+    @objc private func fullscreenChanged() {
+        if FullscreenWatcher.shared.isFullscreen {
+            scheduleFullscreenConcealIfNeeded()
+        } else {
+            fullscreenHideItem?.cancel()
+            fullscreenHideItem = nil
+            if fullscreenConcealed {
+                setFullscreenConcealed(false, animated: true)
+            }
+            refreshChromeOpacity(animated: true)
+        }
+    }
+
+    /// While a fullscreen space/app is active, tuck the collapsed notch away
+    /// after the pointer leaves. Pinned-expanded keeps the strip usable.
+    private func scheduleFullscreenConcealIfNeeded() {
+        fullscreenHideItem?.cancel()
+        fullscreenHideItem = nil
+        guard FullscreenWatcher.shared.isFullscreen else { return }
+        guard panel.isVisible else { return }
+        if PillPlacement.pinExpanded && expanded { return }
+        if expanded || hovering || dragging { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.fullscreenHideItem = nil
+            guard FullscreenWatcher.shared.isFullscreen else { return }
+            guard !self.expanded, !self.hovering, !self.dragging else { return }
+            if PillPlacement.pinExpanded && self.expanded { return }
+            self.setFullscreenConcealed(true, animated: true)
+        }
+        fullscreenHideItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55, execute: work)
+    }
+
+    private func setFullscreenConcealed(_ conceal: Bool, animated: Bool) {
+        guard fullscreenConcealed != conceal else {
+            if conceal { setOpacity(Self.concealedAlpha, animated: animated) }
+            return
+        }
+        fullscreenConcealed = conceal
+        panel.hasShadow = !conceal
+        if conceal {
+            discreetItem?.cancel()
+            discreetItem = nil
+            setOpacity(Self.concealedAlpha, animated: animated)
+        } else {
+            setOpacity(1, animated: animated)
+            refreshChromeOpacity(animated: animated)
+        }
+    }
+
+    private static let concealedAlpha: CGFloat = 0.02
 
     /// Move onto the chosen display, honor pin, and refresh idle opacity.
     /// Dragging owns the frame until mouse-up, so this waits.
@@ -369,11 +468,14 @@ final class PillPanelController: NSObject {
             animate(to: target, expanding: expanded)
         }
 
-        if !PillPlacement.pinExpanded && expanded && !hovering && !panel.frame.contains(NSEvent.mouseLocation) {
-            scheduleCollapse()
-        }
+        root.apply(mirror: mirror, expanded: expanded)
         root.refreshPinChrome()
         refreshChromeOpacity(animated: true)
+        if !PillPlacement.pinExpanded && expanded && !hovering && !panel.frame.contains(NSEvent.mouseLocation) {
+            scheduleCollapse()
+        } else if !expanded {
+            scheduleFullscreenConcealIfNeeded()
+        }
     }
 
     private func dragCollapsed(to origin: NSPoint) {
@@ -401,14 +503,26 @@ final class PillPanelController: NSObject {
         DisplayList.storeFreeOrigin(panel.frame.origin, size: panel.frame.size, on: screen)
         PillPlacement.postChange()
         if panel.frame.contains(NSEvent.mouseLocation) {
-            clickCollapsed()
+            // Drag end is not a focus click. Resume hover-expand.
+            hovering = true
+            setOpacity(1, animated: false)
+            scheduleExpand()
         } else {
             hovering = false
             refreshChromeOpacity(animated: true)
+            scheduleFullscreenConcealIfNeeded()
         }
     }
 
     private func refreshChromeOpacity(animated: Bool) {
+        if fullscreenConcealed {
+            setOpacity(Self.concealedAlpha, animated: animated)
+            return
+        }
+        if FullscreenWatcher.shared.isFullscreen && !expanded && !hovering && !dragging
+            && !(PillPlacement.pinExpanded && expanded) {
+            // About to conceal, or waiting on the conceal timer — stay full until then.
+        }
         let wantsFull = expanded || hovering || dragging || !PillPlacement.discreetMode
         if wantsFull {
             discreetItem?.cancel()
@@ -417,7 +531,7 @@ final class PillPanelController: NSObject {
             return
         }
         // Already faded: a new opacity level applies immediately.
-        if panel.alphaValue < 0.98 {
+        if panel.alphaValue < 0.98 && panel.alphaValue > Self.concealedAlpha + 0.05 {
             discreetItem?.cancel()
             discreetItem = nil
             setOpacity(PillPlacement.discreetOpacity, animated: animated)
@@ -428,6 +542,7 @@ final class PillPanelController: NSObject {
             guard let self else { return }
             self.discreetItem = nil
             guard !self.expanded, !self.hovering, !self.dragging, PillPlacement.discreetMode else { return }
+            guard !self.fullscreenConcealed else { return }
             self.setOpacity(PillPlacement.discreetOpacity, animated: true)
         }
         discreetItem = work
@@ -605,6 +720,7 @@ final class PillRootView: NSView {
         needsLayout = true
         updateChrome()
         refreshPinChrome()
+        refreshFocusChrome()
     }
 
     func refreshPinChrome() {
@@ -612,6 +728,10 @@ final class PillRootView: NSView {
         pinButton.isHidden = !show
         pinButton.alphaValue = show ? 1 : 0
         needsLayout = true
+    }
+
+    func refreshFocusChrome() {
+        chrome.refreshLabel()
     }
 
     override func layout() {
@@ -676,8 +796,8 @@ final class PillRootView: NSView {
         trackClickOrDrag()
     }
 
-    /// A small click expands. A drag along the attached edge parks the notch
-    /// and does not expand until the pointer is released on top of it.
+    /// A small click toggles focus. A drag along the attached edge parks the
+    /// notch. Hover (not click) expands the Touch Bar after a short delay.
     private func trackClickOrDrag() {
         guard let window else {
             onEntered?()
@@ -963,7 +1083,8 @@ enum PillShape {
     }
 }
 
-/// Centered “Touch Bar” label. Rotates 90° on left/right edges.
+/// Centered collapsed label. Idle shows “Touch Bar”; focus shows the timer.
+/// SF Pro Rounded, medium/semibold, tight tracking, tuned for the 32-pt notch.
 final class CollapsedChromeView: NSView {
     var edge: PillEdge = .topCenter
 
@@ -975,13 +1096,22 @@ final class CollapsedChromeView: NSView {
 
     override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
 
-    override func accessibilityLabel() -> String? { isHidden ? nil : L("Touch Bar") }
+    override func accessibilityLabel() -> String? {
+        isHidden ? nil : FocusSession.shared.notchLabel
+    }
+
+    func refreshLabel() {
+        needsDisplay = true
+    }
 
     override func draw(_ dirtyRect: NSRect) {
-        let title = L("Touch Bar") as NSString
+        let session = FocusSession.shared
+        let title = session.notchLabel as NSString
+        let font = Self.labelFont(for: session.phase)
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.94),
+            .font: font,
+            .foregroundColor: NSColor.white.withAlphaComponent(session.labelAlpha),
+            .kern: Self.tracking(for: session.phase),
         ]
         let textSize = title.size(withAttributes: attributes)
 
@@ -989,23 +1119,54 @@ final class CollapsedChromeView: NSView {
             NSGraphicsContext.saveGraphicsState()
             let transform = NSAffineTransform()
             // Draw upright into a sideways slot: rotate so the baseline runs
-            // along the bezel.
+            // along the bezel. Optical nudge keeps the rounded face centered.
             if edge.attachesLeft {
-                transform.translateX(by: bounds.midX - textSize.height / 2 - 1, yBy: bounds.midY + textSize.width / 2)
+                transform.translateX(by: bounds.midX - textSize.height / 2 - 0.5, yBy: bounds.midY + textSize.width / 2)
                 transform.rotate(byDegrees: -90)
             } else {
-                transform.translateX(by: bounds.midX + textSize.height / 2 + 1, yBy: bounds.midY - textSize.width / 2)
+                transform.translateX(by: bounds.midX + textSize.height / 2 + 0.5, yBy: bounds.midY - textSize.width / 2)
                 transform.rotate(byDegrees: 90)
             }
             transform.concat()
             title.draw(at: .zero, withAttributes: attributes)
             NSGraphicsContext.restoreGraphicsState()
         } else {
+            // Optical vertical center: rounded faces sit a hair high, so nudge down.
             let origin = NSPoint(
                 x: floor((bounds.width - textSize.width) / 2),
-                y: floor((bounds.height - textSize.height) / 2) - 1
+                y: floor((bounds.height - textSize.height) / 2) - 0.5
             )
             title.draw(at: origin, withAttributes: attributes)
+        }
+    }
+
+    private static func labelFont(for phase: FocusPhase) -> NSFont {
+        let size: CGFloat
+        let weight: NSFont.Weight
+        switch phase {
+        case .idle:
+            // ~32-pt notch: 11.5 pt reads premium without crowding the ears.
+            size = 11.5
+            weight = .medium
+        case .running, .paused:
+            size = 12.5
+            weight = .semibold
+        case .done:
+            size = 11.5
+            weight = .semibold
+        }
+        let base = NSFont.systemFont(ofSize: size, weight: weight)
+        if let rounded = base.fontDescriptor.withDesign(.rounded) {
+            return NSFont(descriptor: rounded, size: size) ?? base
+        }
+        return base
+    }
+
+    private static func tracking(for phase: FocusPhase) -> CGFloat {
+        switch phase {
+        case .idle: return -0.35
+        case .running, .paused: return -0.2
+        case .done: return -0.25
         }
     }
 }

@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var discreetItem: NSMenuItem!
     private let displayMenu = NSMenu()
     private let positionMenu = NSMenu()
+    private let focusGoalMenu = NSMenu()
+    private var resetFocusItem: NSMenuItem!
     private var didTeardown = false
     private var mirror: DFRMirror!
     private var pill: PillPanelController!
@@ -27,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.mirrorChanged()
         }
         mirror.start()
+        FullscreenWatcher.shared.start()
 
         buildStatusItem()
         if !UserDefaults.standard.bool(forKey: "PillHidden") {
@@ -48,8 +51,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem.state = LaunchAtLogin.isOn ? .on : .off
         pinItem.state = PillPlacement.pinExpanded ? .on : .off
         discreetItem.state = PillPlacement.discreetMode ? .on : .off
+        resetFocusItem.isEnabled = FocusSession.shared.phase != .idle
         rebuildDisplayMenu()
         rebuildPositionMenu()
+        rebuildFocusGoalMenu()
     }
 
     private func buildStatusItem() {
@@ -86,6 +91,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        resetFocusItem = NSMenuItem(title: L("Reset Focus"), action: #selector(resetFocus), keyEquivalent: "")
+        resetFocusItem.target = self
+        menu.addItem(resetFocusItem)
+
+        let focusGoalItem = NSMenuItem(title: L("Focus Goal"), action: nil, keyEquivalent: "")
+        focusGoalItem.submenu = focusGoalMenu
+        menu.addItem(focusGoalItem)
+
+        menu.addItem(.separator())
+
         let preferencesItem = NSMenuItem(title: L("Preferences…"), action: #selector(showPreferences), keyEquivalent: ",")
         preferencesItem.target = self
         menu.addItem(preferencesItem)
@@ -115,6 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func teardown() {
         guard !didTeardown else { return }
         didTeardown = true
+        FullscreenWatcher.shared.stop()
         pill?.hide()
         mirror?.stop()
         if let statusItem {
@@ -154,6 +170,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleDiscreet() {
         PillPlacement.discreetMode.toggle()
         PillPlacement.postChange()
+    }
+
+    @objc private func resetFocus() {
+        FocusSession.shared.reset()
+    }
+
+    @objc private func chooseFocusGoal(_ sender: NSMenuItem) {
+        guard let goal = FocusGoal(rawValue: sender.tag) else { return }
+        FocusSession.shared.goal = goal
     }
 
     @objc private func chooseDisplay(_ sender: NSMenuItem) {
@@ -208,6 +233,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let selected = PillPlacement.edge == edge && PillPlacement.isPurePreset
             item.state = selected ? .on : .off
             positionMenu.addItem(item)
+        }
+    }
+
+    private func rebuildFocusGoalMenu() {
+        focusGoalMenu.removeAllItems()
+        let current = FocusSession.shared.goal
+        for goal in FocusGoal.allCases {
+            let item = NSMenuItem(title: goal.shortTitle, action: #selector(chooseFocusGoal(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = goal.rawValue
+            item.state = goal == current ? .on : .off
+            focusGoalMenu.addItem(item)
         }
     }
 
@@ -266,6 +303,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Edge: \(PillPlacement.edge.rawValue) offset \(String(format: "%.1f", Double(PillPlacement.offset)))
         PinExpanded: \(PillPlacement.pinExpanded)
         DiscreetMode: \(PillPlacement.discreetMode) opacity \(String(format: "%.2f", Double(PillPlacement.discreetOpacity))) idle \(String(format: "%.2f", PillPlacement.idleDelay))
+        FocusGoal: \(FocusSession.shared.goal.rawValue)m phase \(String(describing: FocusSession.shared.phase)) elapsed \(String(format: "%.0f", FocusSession.shared.displayElapsed))s
+        Fullscreen: \(FullscreenWatcher.shared.isFullscreen ? "yes" : "no")
         ExpandedPlacement: follows \(PillPlacement.edge.rawValue) on the chosen display
         \(LaunchAtLogin.diagnosticLine())
         \(mirror.diagnosticSummary())

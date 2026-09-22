@@ -11,6 +11,20 @@
 "Open at Login (approval needed)" = "Abrir al iniciar sesión (falta aprobación)";
 "TouchBarPill — click to quit" = "TouchBarPill — clic para salir";
 
+/* Foco */
+"Focus" = "Foco";
+"Focus Goal" = "Meta de foco";
+"Reset Focus" = "Reiniciar foco";
+"Goal: Off" = "Meta: Desactivada";
+"Goal: 25 min" = "Meta: 25 min";
+"Goal: 50 min" = "Meta: 50 min";
+"Off" = "Desactivada";
+"25 min" = "25 min";
+"50 min" = "50 min";
+"Done" = "Listo";
+"Paused" = "Pausa";
+"Click the collapsed notch to start or pause a focus timer. Goal Off means no done state. 25 or 50 minutes show Done gently on the notch. Default goal is Off." = "Haz clic en la muesca plegada para iniciar o pausar el temporizador de foco. Meta Desactivada = sin estado Listo. 25 o 50 minutos muestran Listo con suavidad en la muesca. La meta por omisión es Desactivada.";
+
 /* Preferencias */
 "TouchBarPill Preferences" = "Preferencias de TouchBarPill";
 "A black tab sits on the top edge of the screen. Hover it to open the live adaptive Touch Bar, then move away and it folds back into the tab." = "Una pestaña negra queda pegada al borde superior de la pantalla. Pasa el puntero para abrir la Touch Bar adaptativa; al salir, se pliega otra vez.";
@@ -49,6 +63,7 @@
 "Idle opacity" = "Opacidad en reposo";
 "none" = "ninguna";
 "A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned." = "Una muesca negra se pega al borde que elijas — centro superior por omisión, o inferior, medio izquierda o medio derecha. Arrástrala por ese borde. Pasa el puntero para abrir la Touch Bar. La tira expandida sigue el mismo borde. Al salir se pliega, salvo que esté fijada.";
+"A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. Click the collapsed notch to start or pause Focus. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned." = "Una muesca negra se pega al borde que elijas — centro superior por omisión, o inferior, medio izquierda o medio derecha. Arrástrala por ese borde. Pasa el puntero para abrir la Touch Bar. Haz clic en la muesca plegada para iniciar o pausar Foco. La tira expandida sigue el mismo borde. Al salir se pliega, salvo que esté fijada.";
 "The notch and the expanded strip use the edge you choose on this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns." = "La muesca y la tira usan el borde que elijas en esta pantalla. Si la desconectas, TouchBarPill usa la integrada, o la principal, hasta que vuelva.";
 "That display is unplugged. Showing the built-in display, or the main display, until it is back. The choice is remembered." = "Esa pantalla está desconectada. Se muestra la integrada, o la principal, hasta que vuelva. La elección se recuerda.";
 "Drag the collapsed notch along its attached edge. Top center, Bottom center, Left mid, and Right mid park it on that display. The expanded strip follows the same edge and stays on screen." = "Arrastra la muesca plegada por el borde al que está pegada. Centro superior, Centro inferior, Medio izquierda y Medio derecha la colocan en esa pantalla. La tira expandida sigue el mismo borde y se queda en pantalla.";

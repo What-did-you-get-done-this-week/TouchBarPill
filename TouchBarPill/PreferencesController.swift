@@ -1,7 +1,7 @@
 import AppKit
 
 /// Preferences for the stream, collapse delay, login item, display, position,
-/// pin, and discreet mode. The collapse delay itself is still a defaults key.
+/// pin, discreet mode, and focus goal. The collapse delay itself is still a defaults key.
 final class PreferencesController: NSWindowController {
     private let statusTitle = NSTextField(labelWithString: L("Stream"))
     private let statusBody = NSTextField(wrappingLabelWithString: L("Starting…"))
@@ -16,12 +16,14 @@ final class PreferencesController: NSWindowController {
     private let discreetSwitch = NSSwitch()
     private let opacitySlider = NSSlider()
     private let opacityReadout = NSTextField(labelWithString: "")
+    private let focusGoalPopup = NSPopUpButton()
+    private let resetFocusButton = NSButton(title: L("Reset Focus"), target: nil, action: nil)
     private var mirror: DFRMirror?
     private var suppressUI = false
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 640),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -34,6 +36,12 @@ final class PreferencesController: NSWindowController {
             self,
             selector: #selector(placementChanged),
             name: PillPlacement.didChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(focusChanged),
+            name: FocusSession.didChange,
             object: nil
         )
     }
@@ -119,7 +127,7 @@ final class PreferencesController: NSWindowController {
         let heading = NSTextField(labelWithString: "TouchBarPill")
         heading.font = .systemFont(ofSize: 18, weight: .semibold)
 
-        let intro = note(L("A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned."))
+        let intro = note(L("A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. Click the collapsed notch to start or pause Focus. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned."))
         intro.font = .systemFont(ofSize: 12)
         intro.textColor = .secondaryLabelColor
 
@@ -174,6 +182,15 @@ final class PreferencesController: NSWindowController {
         discreetSwitch.setAccessibilityLabel(L("Discreet mode"))
         let discreetNote = note(L("When the tab is collapsed and idle, it fades. Hover or expand brings it back to full opacity. On by default."))
 
+        let focusLabel = sectionLabel(L("Focus Goal"))
+        focusGoalPopup.target = self
+        focusGoalPopup.action = #selector(focusGoalChanged(_:))
+        focusGoalPopup.setAccessibilityLabel(L("Focus Goal"))
+        resetFocusButton.bezelStyle = .rounded
+        resetFocusButton.target = self
+        resetFocusButton.action = #selector(resetFocus(_:))
+        let focusNote = note(L("Click the collapsed notch to start or pause a focus timer. Goal Off means no done state. 25 or 50 minutes show Done gently on the notch. Default goal is Off."))
+
         let opacityLabel = sectionLabel(L("Idle opacity"))
         opacitySlider.minValue = 0.35
         opacitySlider.maxValue = 0.75
@@ -199,6 +216,7 @@ final class PreferencesController: NSWindowController {
             labeledRow(pinLabel, pinSwitch),
             labeledRow(discreetLabel, discreetSwitch),
             labeledRow(opacityLabel, opacityCluster()),
+            labeledRow(focusLabel, focusGoalPopup),
         ]
         stack.addArrangedSubview(heading)
         stack.addArrangedSubview(intro)
@@ -218,12 +236,15 @@ final class PreferencesController: NSWindowController {
         stack.addArrangedSubview(rows[5])
         stack.addArrangedSubview(discreetNote)
         stack.addArrangedSubview(rows[6])
+        stack.addArrangedSubview(rows[7])
+        stack.addArrangedSubview(focusNote)
+        stack.addArrangedSubview(resetFocusButton)
         stack.addArrangedSubview(copy)
         for row in rows {
             row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
 
-        for view in [intro, statusBody, delayNote, loginNote, displayNote, positionNote, pinNote, discreetNote] {
+        for view in [intro, statusBody, delayNote, loginNote, displayNote, positionNote, pinNote, discreetNote, focusNote] {
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
         reloadPlacementControls()
@@ -269,6 +290,10 @@ final class PreferencesController: NSWindowController {
 
     @objc private func placementChanged() {
         reloadPlacementControls()
+    }
+
+    @objc private func focusChanged() {
+        reloadFocusControls()
     }
 
     private func reloadPlacementControls() {
@@ -320,6 +345,22 @@ final class PreferencesController: NSWindowController {
         opacitySlider.isEnabled = PillPlacement.discreetMode
         opacitySlider.doubleValue = Double(PillPlacement.discreetOpacity)
         opacityReadout.stringValue = "\(Int((PillPlacement.discreetOpacity * 100).rounded()))%"
+        reloadFocusControls()
+    }
+
+    private func reloadFocusControls() {
+        let was = suppressUI
+        suppressUI = true
+        defer { suppressUI = was }
+
+        focusGoalPopup.removeAllItems()
+        let current = FocusSession.shared.goal
+        for goal in FocusGoal.allCases {
+            focusGoalPopup.addItem(withTitle: goal.shortTitle)
+            focusGoalPopup.lastItem?.tag = goal.rawValue
+        }
+        focusGoalPopup.selectItem(withTag: current.rawValue)
+        resetFocusButton.isEnabled = FocusSession.shared.phase != .idle
     }
 
     @objc private func loginSwitchChanged(_ sender: NSSwitch) {
@@ -370,6 +411,15 @@ final class PreferencesController: NSWindowController {
         PillPlacement.discreetOpacity = CGFloat(sender.doubleValue)
         opacityReadout.stringValue = "\(Int((sender.doubleValue * 100).rounded()))%"
         PillPlacement.postChange()
+    }
+
+    @objc private func focusGoalChanged(_ sender: NSPopUpButton) {
+        guard !suppressUI, let item = sender.selectedItem else { return }
+        FocusSession.shared.goal = FocusGoal(rawValue: item.tag) ?? .off
+    }
+
+    @objc private func resetFocus(_ sender: NSButton) {
+        FocusSession.shared.reset()
     }
 
     @objc private func copyDiagnostics() {

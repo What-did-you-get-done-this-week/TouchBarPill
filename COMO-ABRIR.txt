@@ -1,0 +1,58 @@
+COMO ABRIR — TouchBarPill 0.4.0
+================================
+
+Qué es
+------
+TouchBarPill es una utilidad de barra de menú. Plegada, es una muesca negra en el borde que elijas (centro superior por omisión). Al pasar el puntero se expande a la Touch Bar adaptativa en vivo. En 0.4.0 la muesca plegada también es un temporizador de foco manual, y se oculta sola en pantalla completa.
+
+Instalar / abrir
+----------------
+1. Cierra Touché si está abierto (compiten por el mismo simulador).
+2. Abre TouchBarPill.app (o TouchBarPill-0.4.0.app).
+3. Aparece el icono en la barra de menú y la muesca en el borde.
+4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
+
+Clic frente a pasar el puntero (importante)
+-------------------------------------------
+- Pasar el puntero (hover): tras un breve retraso (~0,14 s) la muesca se EXPÁNDE a la Touch Bar. Así un arrastre puede empezar sin abrirla.
+- Clic en la muesca PLEGADA: inicia / pausa el FOCO. No fija ni expande la tira.
+- Arrastrar por el borde: mueve la muesca. Al soltar encima, no cuenta como clic de foco; el hover puede expandir después.
+- Clic con la tira ya expandida: reenvía el toque a la Touch Bar real (como siempre).
+
+Foco (M6)
+---------
+- Reposo (sin sesión): la etiqueta dice «Touch Bar» (tipografía SF Pro Rounded, peso medio, tracking un poco más cerrado).
+- Clic: arranca el cronómetro → «0:01», «12:34»…
+- Otro clic: pausa (tiempo atenuado + ⏸). Otro clic: reanuda.
+- Meta (menú de estado o Preferencias): Desactivada / 25 min / 50 min. Por omisión Desactivada (no sorprende).
+- Al llegar a la meta: «✓ Listo» en la muesca, sin modal. Un clic limpia Listo y empieza de nuevo.
+- Reiniciar foco: menú de estado o Preferencias.
+- Solo manual. No mira otras apps ni pide Accesibilidad.
+- La sesión (tiempo / pausa) vive en memoria; la meta sí se recuerda.
+
+Pantalla completa (auto-ocultar)
+--------------------------------
+- Si estás en un espacio o app a pantalla completa (p. ej. película), la muesca plegada se vuelve casi invisible para no distraer.
+- Queda un hit target casi invisible en el mismo sitio del borde. Pasa el puntero por ahí: la muesca vuelve (opacidad) y puedes expandir o hacer clic de foco como siempre.
+- Al salir el puntero, y si no está fijada expandida, se vuelve a ocultar tras un breve retraso mientras sigas en pantalla completa.
+- Si la tira está fijada (Pin expanded) en pantalla completa, permanece usable; no te deja atrapado.
+- Al salir de pantalla completa, la muesca plegada vuelve al modo normal (con opacidad discreta si está activada).
+- Detección con APIs públicas de AppKit (opciones de presentación del sistema, cambio de Space, marco visible). No lee datos de otras apps.
+
+Lo que se mantiene de 0.3.1
+---------------------------
+- Posiciones: centro superior / inferior / medio izquierda / derecha; arrastre por el borde.
+- Fijar expandida: chincheta suave al pasar el puntero; clic derecho → Desfijar; menú / Preferencias.
+- Modo discreto (atenuar en reposo), Abrir al iniciar sesión OFF por omisión, señal DFR.
+
+Preferencias y menú
+-------------------
+Icono de la barra de menú → Preferencias… / Meta de foco / Reiniciar foco / Posición / Pantalla / Fijar / Discreto / Abrir al iniciar sesión / Copiar diagnósticos / Salir.
+
+Salir
+-----
+Icono de la barra de menú → Salir de TouchBarPill (⌘Q en ese menú).
+
+Nota
+----
+No escanea otras apps. No pide Accesibilidad. No lee el contenido de otras ventanas.

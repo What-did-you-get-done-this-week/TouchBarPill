@@ -1,10 +1,8 @@
 # TouchBarPill
 
-TouchBarPill is a menu-bar utility for a Mac whose Touch Bar still receives taps but no longer draws. Collapsed, it is a black notch on the edge you choose (top center by default, or bottom center, left mid, or right mid). Hover it and it expands into the live adaptive Touch Bar along that same edge. Move the pointer away and, after a short delay, it collapses, unless you pin it open. After a short idle it fades. Menus follow the system language (English and Spanish). Opening at login stays off until you turn it on.
+TouchBarPill is a menu-bar utility for a Mac whose Touch Bar still receives taps but no longer draws. Collapsed, it is a black notch on the edge you choose (top center by default, or bottom center, left mid, or right mid). Hover it and it expands into the live adaptive Touch Bar along that same edge. **Click** the collapsed notch to start or pause a manual focus timer. Move the pointer away and, after a short delay, it collapses, unless you pin it open. After a short idle it fades. In a fullscreen space it visually tucks away but stays hittable on the edge. Menus follow the system language (English and Spanish). Opening at login stays off until you turn it on.
 
 The picture is not a screenshot. Frames come from the same private Touch Bar simulator interface that open-source simulators use, and clicks are posted back into that simulator so the real buttons fire. The physical OLED does not have to work. macOS still renders the bar on the host, which is why Touché can mirror it.
-
-This tree was written on a Linux machine. It has not been launched. Build and run it on the Mac.
 
 ## How this differs from Touché
 
@@ -12,12 +10,13 @@ Touché proves the adaptive bar can be mirrored, including system prompts (Allow
 
 TouchBarPill uses that same class of private API, and changes the window:
 
-- Collapsed, it is a notch-style tab about 132×32 points on the chosen edge. Top and bottom attach flush with concave ears on that edge; left and right rotate the same shape onto the bezel. The only label is “Touch Bar”. Drag it along the attached edge, or choose Top center, Bottom center, Left mid, or Right mid. The choice is remembered. Hover still opens it; the expand waits a fraction of a second so a drag can start.
+- Collapsed, it is a notch-style tab about 132×32 points on the chosen edge. Top and bottom attach flush with concave ears on that edge; left and right rotate the same shape onto the bezel. Idle label is “Touch Bar” (SF Pro Rounded). Drag it along the attached edge, or choose Top center, Bottom center, Left mid, or Right mid. The choice is remembered. **Hover** opens the strip after a short delay so a drag can start; **click** toggles Focus and does not expand.
+- Focus (manual only): click start/pause, live `m:ss` on the notch, optional goal Off / 25 / 50 (default Off), Done state without a modal. Reset from the status menu or Preferences. No Accessibility / no other-app watching.
+- Fullscreen auto-hide: in a fullscreen space the collapsed notch fades to a near-invisible edge hit target; hover reveals it. Pinned-expanded stays usable. Leaves fullscreen → normal discreet notch again. Uses public AppKit presentation options / space changes — not other apps’ private data.
 - Expanded, the strip is 15% larger than the previous three-quarter mirror (scale 0.75 × 1.15), width, height, padding, and fallback type kept in proportion. It follows the chosen edge (top/bottom centered, or near the left/right bezel) and stays clamped on screen.
-- Hover, or a click on the tab, expands it into a wide strip.
 - The pointer leaving the strip collapses it after 0.4 seconds. Pin expanded keeps it open until you unpin it from the status menu, Preferences, right-click → Unpin on the strip, or the soft hover pushpin.
 - When the tab is collapsed and idle for about 1.2 seconds, discreet mode (on by default) fades it to about 52% opacity. Hover or expand restores full opacity.
-- There is no Dock icon. A status item has Show/Hide, Display, Position, Pin expanded, Discreet mode, Preferences, Open at Login, Copy Diagnostics, and Quit. The menu-bar icon stays.
+- There is no Dock icon. A status item has Show/Hide, Display, Position, Pin expanded, Discreet mode, Focus Goal, Reset Focus, Preferences, Open at Login, Copy Diagnostics, and Quit. The menu-bar icon stays.
 
 Volume and brightness controls are not reimplemented. The expanded strip is the adaptive bar itself. If the stream cannot attach, the strip becomes a short message and a Try Again button instead of fake stand-in controls.
 
