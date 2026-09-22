@@ -61,15 +61,26 @@ enum SystemVolume {
         return isMuted()
     }
 
+    /// Set the output level to 0...1. Unmutes when the new level is audible.
+    @discardableResult
+    static func setLevel(_ value: Float) -> Float? {
+        writeLevel(value, unmute: value > 0.001 && isMuted())
+    }
+
     /// Adjust volume by delta (−1...1). Unmutes when raising. Returns new volume 0...1.
     @discardableResult
     static func adjust(by delta: Float) -> Float? {
-        guard let device = defaultOutputDevice() else { return nil }
         let current = volume() ?? 0
-        if delta > 0, isMuted() {
+        return writeLevel(current + delta, unmute: delta > 0 && isMuted())
+    }
+
+    @discardableResult
+    private static func writeLevel(_ value: Float, unmute: Bool) -> Float? {
+        guard let device = defaultOutputDevice() else { return nil }
+        if unmute {
             _ = setMuted(false)
         }
-        let next = min(max(current + delta, 0), 1)
+        let next = min(max(value, 0), 1)
         if setScalar(device: device, selector: virtualMasterVolume, value: next) {
             return next
         }

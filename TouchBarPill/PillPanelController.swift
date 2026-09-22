@@ -2,8 +2,11 @@ import AppKit
 import QuartzCore
 
 enum PillMetrics {
-    /// Medium (default) collapsed notch. S scales via `PillPlacement.size`.
-    static let collapsedSize = NSSize(width: 132, height: 32)
+    /// Medium collapsed notch: focus wing, center title, volume wing.
+    /// S (the fresh-install default) scales via `PillPlacement.size`.
+    static var collapsedSize: NSSize {
+        NSSize(width: ZonePolicy.span, height: ZonePolicy.depth)
+    }
     static let notchEarRadius: CGFloat = 11
     static let notchBottomRadius: CGFloat = 10
 
@@ -78,15 +81,13 @@ final class PillPanelController: NSObject {
     private var expandItem: DispatchWorkItem?
     private var discreetItem: DispatchWorkItem?
     private var fullscreenHideItem: DispatchWorkItem?
-    private var pendingFocusClick: DispatchWorkItem?
-    private var volumeFlashItem: DispatchWorkItem?
     private var scrollMonitor: Any?
     private var localScrollMonitor: Any?
     private var lastScrollStamp: TimeInterval = -1
-    /// Hover-expand waits until this time so a volume scroll is not swallowed.
-    private var volumeHoldUntil = Date.distantPast
-    /// Big readout stays up until this time. Cinema must not hide it early.
-    private var volumeHUDUntil = Date.distantPast
+    private var hoverZone: ZoneID?
+    private var syncingPointer = false
+    /// Second click of a double-click must not undo the mute.
+    private var lastVolumeToggle = Date.distantPast
     private var chromeGeneration = 0
     /// Fullscreen: notch draws nothing, but the wide edge pad still receives hits.
     private var fullscreenConcealed = false
@@ -108,11 +109,13 @@ final class PillPanelController: NSObject {
             guard let root else { return false }
             return root.hitShapeContains(point)
         }
-        root.onEntered = { [weak self] in self?.pointerEntered() }
-        root.onExited = { [weak self] in self?.pointerExited() }
+        root.onPointer = { [weak self] in self?.syncPointer() }
         root.onPress = { [weak self] in self?.pressBegan() }
-        root.onClick = { [weak self] in self?.scheduleFocusClick() }
-        root.onDoubleClick = { [weak self] in self?.doubleClickCollapsed() }
+        root.onFocusPrimary = { [weak self] in self?.focusPrimaryClicked() }
+        root.onFocusStop = { [weak self] in self?.focusStopClicked() }
+        root.onCenterClick = { [weak self] in self?.centerClicked() }
+        root.onVolumeClick = { [weak self] in self?.volumeClicked() }
+        root.onVolumeScrub = { [weak self] point in self?.scrubVolume(to: point) }
         root.onScroll = { [weak self] event in self?.scrollCollapsed(event) }
         root.onDrag = { [weak self] origin in self?.dragCollapsed(to: origin) }
         root.onDragEnd = { [weak self] in self?.finishDrag() }
@@ -192,7 +195,7 @@ final class PillPanelController: NSObject {
         panel.invalidateShadow()
         root.updateTrackingAreas()
         if !pinned && panel.frame.contains(NSEvent.mouseLocation) {
-            pointerEntered()
+            syncPointer()
         } else if FullscreenWatcher.shared.isFullscreen {
             concealForFullscreen(immediate: true)
         } else {
@@ -206,14 +209,10 @@ final class PillPanelController: NSObject {
         expandItem = nil
         discreetItem?.cancel()
         discreetItem = nil
-        volumeFlashItem?.cancel()
-        volumeFlashItem = nil
-        volumeHUDUntil = .distantPast
-        VolumeChrome.extraDepth = 0
-        VolumeChrome.extraSpan = 0
+        VolumeChrome.sliderVisible = false
+        hoverZone = nil
         expanded = false
         hovering = false
-        root.setVolumeReadout(percent: nil, muted: false)
         root.apply(mirror: mirror, expanded: false)
         panel.alphaValue = 1
         panel.orderOut(nil)
@@ -260,8 +259,68 @@ final class PillPanelController: NSObject {
         PillPlacement.postChange()
     }
 
-    private func pointerEntered() {
-        hovering = true
+    /// Sample the pointer and apply zone rules. Wings never arm expand.
+    /// Only the center tab does, after the existing short delay.
+    private func syncPointer() {
+        if syncingPointer || dragging { return }
+        syncingPointer = true
+        defer { syncingPointer = false }
+
+        if expanded {
+            let inside = root.pointerInsideShape()
+            if inside {
+                hovering = true
+                hoverZone = nil
+                root.setHotZone(nil)
+                collapseItem?.cancel()
+                discreetItem?.cancel()
+                discreetItem = nil
+                fullscreenHideItem?.cancel()
+                fullscreenHideItem = nil
+                if fullscreenConcealed { setFullscreenConcealed(false, animated: false) }
+                setOpacity(1, animated: true)
+            } else if panel.frame.contains(NSEvent.mouseLocation) {
+                hovering = true
+            } else {
+                hovering = false
+                hoverZone = nil
+                root.setHotZone(nil)
+                guard !PillPlacement.pinExpanded else { return }
+                scheduleCollapse()
+            }
+            return
+        }
+
+        var inside = root.pointerInsideShape()
+        var zone = inside ? root.zoneUnderPointer() : nil
+        let wantsSlider = inside && (zone == .volume || zone == .volumeSlider)
+        if wantsSlider != VolumeChrome.sliderVisible {
+            VolumeChrome.sliderVisible = wantsSlider
+            if panel.isVisible, let screen = DisplayList.resolved() {
+                panel.setFrame(collapsedFrame(on: screen), display: true)
+                root.needsLayout = true
+                root.layoutSubtreeIfNeeded()
+                root.updateTrackingAreas()
+                updatePanelShadow()
+            }
+            inside = root.pointerInsideShape()
+            zone = inside ? root.zoneUnderPointer() : nil
+        }
+
+        let wasZone = hoverZone
+        hovering = inside
+        hoverZone = inside ? zone : nil
+        if hoverZone != wasZone {
+            root.setHotZone(hoverZone)
+        }
+
+        if !inside {
+            cancelExpand()
+            refreshChromeOpacity(animated: true)
+            scheduleFullscreenConcealIfNeeded()
+            return
+        }
+
         collapseItem?.cancel()
         discreetItem?.cancel()
         discreetItem = nil
@@ -271,26 +330,27 @@ final class PillPanelController: NSObject {
             setFullscreenConcealed(false, animated: false)
         }
         setOpacity(1, animated: true)
-        root.refreshFocusChrome()
-        guard !expanded, !dragging else { return }
-        if Date() < volumeHoldUntil { return }
-        // A short delay lets a press-and-drag park the tab. A plain hover
-        // still opens it. The drag loop runs in event-tracking mode, so this
-        // timer does not fire until the press ends unless it was cancelled.
-        scheduleExpand()
+        if ZonePolicy.keepExpandPending(zone: hoverZone) {
+            if expandItem == nil || !ZonePolicy.keepExpandPending(zone: wasZone) {
+                scheduleExpand()
+            }
+        } else {
+            cancelExpand()
+        }
     }
 
     /// Hover-expand delay. Long enough to begin a drag, short enough that
     /// resting the pointer still feels immediate. Default ~0.09s (snappier).
+    /// The work item refuses to open unless the pointer is still on the center.
     private func scheduleExpand() {
         expandItem?.cancel()
-        guard pendingFocusClick == nil else { return }
-        guard Date() >= volumeHoldUntil else { return }
+        guard ZonePolicy.expandsTouchBar(hoverZone), !expanded, !dragging else {
+            expandItem = nil
+            return
+        }
         let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.expanded, !self.dragging, self.hovering else { return }
-            guard self.pendingFocusClick == nil else { return }
-            guard Date() >= self.volumeHoldUntil else { return }
-            // A press owns the notch (focus click or drag). Do not open under it.
+            guard let self, !self.expanded, !self.dragging else { return }
+            guard ZonePolicy.expandsTouchBar(self.hoverZone) else { return }
             if (NSEvent.pressedMouseButtons & 1) != 0 { return }
             self.setExpanded(true)
         }
@@ -298,73 +358,99 @@ final class PillPanelController: NSObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + PillPlacement.revealDelay, execute: work)
     }
 
+    private func cancelExpand() {
+        expandItem?.cancel()
+        expandItem = nil
+    }
+
     private func pressBegan() {
-        expandItem?.cancel()
-        expandItem = nil
-        pendingFocusClick?.cancel()
-        pendingFocusClick = nil
+        cancelExpand()
     }
 
-    /// Debounce single-click focus so a double-click can steal it for mute.
-    private func scheduleFocusClick() {
-        pendingFocusClick?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.pendingFocusClick = nil
-            self.clickCollapsed()
+    /// Timer icon starts focus. Pause freezes minutes. Resume continues them.
+    /// None of these open the Touch Bar.
+    private func focusPrimaryClicked() {
+        guard !dragging, !expanded else { return }
+        cancelExpand()
+        switch FocusSession.shared.phase {
+        case .idle:
+            FocusSession.shared.start()
+        case .running:
+            FocusSession.shared.pause()
+        case .paused:
+            FocusSession.shared.resume()
         }
-        pendingFocusClick = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: work)
-    }
-
-    /// Click on the collapsed notch toggles the focus timer. It does not expand.
-    /// Hover (after a short delay) still expands the Touch Bar stream.
-    /// A click that started collapsed still counts if hover opened the strip
-    /// during the double-click wait — that race was dropping right-edge clicks.
-    private func clickCollapsed() {
-        guard !dragging else { return }
-        expandItem?.cancel()
-        expandItem = nil
-        let keepExpanded = expanded
-        if !keepExpanded {
-            discreetItem?.cancel()
-            discreetItem = nil
-            fullscreenHideItem?.cancel()
-            fullscreenHideItem = nil
-            // Reveal if fullscreen-concealed so the timer label is readable.
-            if fullscreenConcealed {
-                setFullscreenConcealed(false, animated: false)
-            }
-            setOpacity(1, animated: false)
-        }
-        FocusSession.shared.toggleFromClick()
-        root.refreshFocusChrome()
-        panel.contentView?.needsDisplay = true
-        if !keepExpanded {
-            // Stay collapsed; hover continues to own expand.
-            refreshChromeOpacity(animated: true)
-        }
-    }
-
-    /// Double-click collapsed notch: toggle system mute (does not expand).
-    private func doubleClickCollapsed() {
-        guard !expanded else { return }
-        pendingFocusClick?.cancel()
-        pendingFocusClick = nil
-        expandItem?.cancel()
-        expandItem = nil
         if fullscreenConcealed {
             setFullscreenConcealed(false, animated: false)
         }
         setOpacity(1, animated: false)
-        let muted = SystemVolume.toggleMute()
-        let percent = Int(((SystemVolume.volume() ?? 0) * 100).rounded())
-        flashVolume(percent: percent, muted: muted)
+        root.refreshFocusChrome()
     }
 
-    /// Scroll over the collapsed notch, or the revealed fullscreen hit pad.
-    /// A global monitor delivers the same wheel when this panel is not key.
-    /// The stamp skips the duplicate. Expand waits so the gesture is not eaten.
+    /// Stop ends the session. The center title returns to “Touch Bar”.
+    private func focusStopClicked() {
+        guard !dragging, !expanded else { return }
+        cancelExpand()
+        FocusSession.shared.reset()
+        if fullscreenConcealed {
+            setFullscreenConcealed(false, animated: false)
+        }
+        setOpacity(1, animated: false)
+        root.refreshFocusChrome()
+    }
+
+    /// The center is the Touch Bar hover target. A click does not change focus.
+    private func centerClicked() {
+        guard !dragging else { return }
+        if ZonePolicy.expandsTouchBar(hoverZone) {
+            scheduleExpand()
+        }
+    }
+
+    /// Click or double-click on the volume wing or slider toggles mute once.
+    private func volumeClicked() {
+        guard !expanded, !dragging else { return }
+        cancelExpand()
+        let now = Date()
+        if now.timeIntervalSince(lastVolumeToggle) < NSEvent.doubleClickInterval {
+            lastVolumeToggle = .distantPast
+            revealVolumeSlider()
+            root.refreshVolumeChrome()
+            return
+        }
+        lastVolumeToggle = now
+        _ = SystemVolume.toggleMute()
+        revealVolumeSlider()
+        root.refreshVolumeChrome()
+    }
+
+    private func scrubVolume(to local: NSPoint) {
+        guard !expanded else { return }
+        cancelExpand()
+        guard let fraction = root.volumeFraction(at: local) else { return }
+        _ = SystemVolume.setLevel(Float(fraction))
+        revealVolumeSlider()
+        root.refreshVolumeChrome()
+    }
+
+    /// Show the anchored slider without opening the Touch Bar stream.
+    private func revealVolumeSlider() {
+        guard !expanded, !dragging else { return }
+        if fullscreenConcealed {
+            setFullscreenConcealed(false, animated: false)
+        }
+        setOpacity(1, animated: false)
+        guard !VolumeChrome.sliderVisible else { return }
+        VolumeChrome.sliderVisible = true
+        guard panel.isVisible, let screen = DisplayList.resolved() else { return }
+        panel.setFrame(collapsedFrame(on: screen), display: true)
+        root.needsLayout = true
+        root.layoutSubtreeIfNeeded()
+        root.updateTrackingAreas()
+        updatePanelShadow()
+    }
+
+    /// Scroll over the volume wing or its slider. The center and focus wing ignore the wheel.
     private func handleGlobalScroll(_ event: NSEvent) {
         let apply = { [weak self] in
             guard let self, self.panel.isVisible, !self.expanded else { return }
@@ -378,33 +464,14 @@ final class PillPanelController: NSObject {
         }
     }
 
-    /// Notch plus a little inward slop. Side edges need this: the visual tab is
-    /// only ~32pt deep, and a wheel event often lands just inside that.
-    private func scrollFrame() -> NSRect {
-        var frame = panel.frame
-        let slop: CGFloat = PillPlacement.edge.isVerticalEdge ? 22 : 10
-        switch PillPlacement.edge {
-        case .leftMid:
-            frame.size.width += slop
-        case .rightMid:
-            frame.origin.x -= slop
-            frame.size.width += slop
-        case .topCenter:
-            frame.origin.y -= slop
-            frame.size.height += slop
-        case .bottomCenter:
-            frame.size.height += slop
-        }
-        return frame
-    }
-
     private func scrollHit() -> Bool {
         guard panel.isVisible, !expanded else { return false }
-        return scrollFrame().contains(NSEvent.mouseLocation)
+        return root.pointerOverVolume(slop: 6)
     }
 
     private func scrollCollapsed(_ event: NSEvent) {
         guard !expanded else { return }
+        guard root.pointerOverVolume(slop: 6) else { return }
         if event.timestamp == lastScrollStamp { return }
         lastScrollStamp = event.timestamp
         var dx = event.scrollingDeltaX
@@ -413,12 +480,9 @@ final class PillPanelController: NSObject {
             dx = -dx
             dy = -dy
         }
-        // Vertical wheel, horizontal scrub, and Option+scroll all count.
-        // The larger axis wins so a side tab still hears a sideways two-finger scrub.
         let dominant = abs(dy) >= abs(dx) ? dy : dx
         let minDelta: CGFloat = event.hasPreciseScrollingDeltas ? 0.35 : 0.01
         guard abs(dominant) >= minDelta else { return }
-        // Positive = volume up. One wheel click is two system steps.
         let steps: Float
         if event.hasPreciseScrollingDeltas {
             steps = Float(dominant) / 8.0
@@ -426,95 +490,15 @@ final class PillPanelController: NSObject {
             steps = dominant > 0 ? 2 : -2
         }
         guard abs(steps) > 0.04 else { return }
-        noteVolumeGesture()
-        guard let volume = SystemVolume.adjust(by: steps * SystemVolume.step) else { return }
-        let percent = Int((volume * 100).rounded())
-        flashVolume(percent: percent, muted: SystemVolume.isMuted())
+        cancelExpand()
+        guard SystemVolume.adjust(by: steps * SystemVolume.step) != nil else { return }
+        revealVolumeSlider()
+        root.refreshVolumeChrome()
     }
 
-    /// Keep the strip collapsed while the wheel is moving volume.
-    private func noteVolumeGesture() {
-        volumeHoldUntil = Date().addingTimeInterval(0.9)
-        expandItem?.cancel()
-        expandItem = nil
-        pendingFocusClick?.cancel()
-        pendingFocusClick = nil
-    }
-
-    /// Large % (or 🔇) for ~0.8s. Grows the notch so the figure is readable on a 32pt tab.
-    private func flashVolume(percent: Int, muted: Bool) {
-        volumeFlashItem?.cancel()
-        // Mark the HUD first so un-conceal does not immediately hide it again.
-        volumeHUDUntil = Date().addingTimeInterval(0.85)
-        discreetItem?.cancel()
-        discreetItem = nil
-        fullscreenHideItem?.cancel()
-        fullscreenHideItem = nil
-        if fullscreenConcealed {
-            setFullscreenConcealed(false, animated: false)
-        }
-        setOpacity(1, animated: false)
-        setVolumeHUD(active: true)
-        root.setVolumeReadout(percent: percent, muted: muted)
-        let work = DispatchWorkItem { [weak self] in
-            self?.endVolumeHUD()
-        }
-        volumeFlashItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.85, execute: work)
-    }
-
-    private func endVolumeHUD() {
-        volumeFlashItem = nil
-        volumeHUDUntil = .distantPast
-        setVolumeHUD(active: false)
-        root.setVolumeReadout(percent: nil, muted: false)
-        guard !expanded, !dragging else { return }
-        if FullscreenWatcher.shared.isFullscreen && !pointerInsidePanel() {
-            concealForFullscreen(immediate: false)
-            return
-        }
-        refreshChromeOpacity(animated: true)
-        if hovering {
-            scheduleExpand()
-        }
-    }
-
-    private func setVolumeHUD(active: Bool) {
-        let depth: CGFloat = active ? 36 : 0
-        let span: CGFloat = active ? 72 : 0
-        guard VolumeChrome.extraDepth != depth || VolumeChrome.extraSpan != span else { return }
-        VolumeChrome.extraDepth = depth
-        VolumeChrome.extraSpan = span
-        guard !expanded, !dragging, panel.isVisible, let screen = DisplayList.resolved() else { return }
-        panel.setFrame(collapsedFrame(on: screen), display: true)
-        root.needsLayout = true
-        root.layoutSubtreeIfNeeded()
-        root.updateTrackingAreas()
-        updatePanelShadow()
-    }
-
+    /// Slider visible keeps the notch opaque the same way the old volume readout did.
     private var volumeHUDActive: Bool {
-        VolumeChrome.isActive || Date() < volumeHUDUntil
-    }
-
-    private func pointerExited() {
-        expandItem?.cancel()
-        expandItem = nil
-        // Tracking areas fire while the window is resizing. Ignore an exit
-        // that still lands inside the panel.
-        if panel.frame.contains(NSEvent.mouseLocation) {
-            hovering = true
-            return
-        }
-        hovering = false
-        guard expanded else {
-            refreshChromeOpacity(animated: true)
-            scheduleFullscreenConcealIfNeeded()
-            return
-        }
-        // Pinned stays open. The pointer can leave.
-        guard !PillPlacement.pinExpanded else { return }
-        scheduleCollapse()
+        VolumeChrome.sliderVisible
     }
 
     private func scheduleCollapse() {
@@ -533,6 +517,10 @@ final class PillPanelController: NSObject {
 
     private func setExpanded(_ expand: Bool) {
         collapseItem?.cancel()
+        if expand {
+            cancelExpand()
+            VolumeChrome.sliderVisible = false
+        }
         let was = expanded
         expanded = expand
         guard let screen = DisplayList.resolved() else { return }
@@ -574,6 +562,7 @@ final class PillPanelController: NSObject {
             self.root.refreshFocusChrome()
             self.refreshChromeOpacity(animated: true)
             if !expanding {
+                self.syncPointer()
                 self.scheduleFullscreenConcealIfNeeded()
             }
         }
@@ -756,16 +745,7 @@ final class PillPanelController: NSObject {
         guard let screen = DisplayList.resolved() else { return }
         DisplayList.storeFreeOrigin(panel.frame.origin, size: panel.frame.size, on: screen)
         PillPlacement.postChange()
-        if panel.frame.contains(NSEvent.mouseLocation) {
-            // Drag end is not a focus click. Resume hover-expand.
-            hovering = true
-            setOpacity(1, animated: false)
-            scheduleExpand()
-        } else {
-            hovering = false
-            refreshChromeOpacity(animated: true)
-            scheduleFullscreenConcealIfNeeded()
-        }
+        syncPointer()
     }
 
     private func refreshChromeOpacity(animated: Bool) {
@@ -933,11 +913,13 @@ final class PillPanelController: NSObject {
 }
 
 final class PillRootView: NSView {
-    var onEntered: (() -> Void)?
-    var onExited: (() -> Void)?
+    var onPointer: (() -> Void)?
     var onPress: (() -> Void)?
-    var onClick: (() -> Void)?
-    var onDoubleClick: (() -> Void)?
+    var onFocusPrimary: (() -> Void)?
+    var onFocusStop: (() -> Void)?
+    var onCenterClick: (() -> Void)?
+    var onVolumeClick: (() -> Void)?
+    var onVolumeScrub: ((NSPoint) -> Void)?
     var onScroll: ((NSEvent) -> Void)?
     var onDrag: ((NSPoint) -> Void)?
     var onDragEnd: (() -> Void)?
@@ -955,11 +937,8 @@ final class PillRootView: NSView {
     let streamView = TouchBarStreamView(frame: .zero)
     private let chrome = CollapsedChromeView(frame: .zero)
     private let fallback = FallbackView(frame: .zero)
-    private var tracking: NSTrackingArea?
+    private var zoneTrackers: [NSTrackingArea] = []
     private(set) var showsExpandedShape = false
-    /// Time-based double-click. Non-activating panels sometimes leave clickCount at 1.
-    private var lastClickUp = Date.distantPast
-    private var lastClickPoint = NSPoint.zero
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -993,6 +972,8 @@ final class PillRootView: NSView {
         let visual = DisplayList.visualCollapsedRect(in: bounds)
         let path = PillShape.path(in: visual, expanded: false, edge: PillPlacement.edge)
         if path.contains(point) { return true }
+        let layout = currentLayout()
+        if layout.slider.width > 1, layout.slider.contains(point) { return true }
         // Fullscreen pad: transparent strip between visual notch and inward edge.
         if FullscreenWatcher.shared.isFullscreen, bounds.contains(point) {
             return true
@@ -1000,10 +981,48 @@ final class PillRootView: NSView {
         return false
     }
 
-    func setVolumeReadout(percent: Int?, muted: Bool) {
-        chrome.volumePercent = percent
-        chrome.volumeMuted = muted
-        chrome.volumeFlash = percent.map { muted ? "🔇" : "\($0)%" }
+    func currentLayout() -> ZonePolicy.Layout {
+        let visual = showsExpandedShape ? bounds : DisplayList.visualCollapsedRect(in: bounds)
+        return ZonePolicy.layout(
+            visual: visual,
+            edge: NotchEdgeKind(PillPlacement.edge),
+            scale: PillPlacement.size.scale,
+            sliderVisible: VolumeChrome.sliderVisible && !showsExpandedShape,
+            focusActive: FocusSession.shared.phase != .idle
+        )
+    }
+
+    func pointerInsideShape() -> Bool {
+        guard let window else { return false }
+        let local = convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+        return hitShapeContains(local)
+    }
+
+    func zoneUnderPointer() -> ZoneID? {
+        guard let window, !showsExpandedShape else { return nil }
+        let local = convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+        guard hitShapeContains(local) else { return nil }
+        return currentLayout().zone(containing: local)
+    }
+
+    func pointerOverVolume(slop: CGFloat) -> Bool {
+        guard let window, !showsExpandedShape else { return false }
+        let local = convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+        return currentLayout().scrollAdjustsVolume(at: local, slop: slop)
+    }
+
+    func volumeFraction(at local: NSPoint) -> CGFloat? {
+        let layout = currentLayout()
+        guard layout.slider.width > 1, layout.slider.height > 1 else { return nil }
+        let edge = NotchEdgeKind(PillPlacement.edge)
+        return ZonePolicy.sliderGeometry(capsule: layout.slider, edge: edge).fraction(at: local, edge: edge)
+    }
+
+    func setHotZone(_ zone: ZoneID?) {
+        chrome.hotZone = zone
+    }
+
+    func refreshVolumeChrome() {
         chrome.refreshLabel()
         needsDisplay = true
     }
@@ -1028,6 +1047,9 @@ final class PillRootView: NSView {
 
     func refreshFocusChrome() {
         chrome.refreshLabel()
+        if !showsExpandedShape {
+            updateTrackingAreas()
+        }
         needsDisplay = true
     }
 
@@ -1046,17 +1068,28 @@ final class PillRootView: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let tracking {
-            removeTrackingArea(tracking)
+        for tracker in zoneTrackers {
+            removeTrackingArea(tracker)
         }
-        let area = NSTrackingArea(
-            rect: .zero,
-            options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        tracking = area
+        zoneTrackers.removeAll()
+        let options: NSTrackingArea.Options = [.activeAlways, .mouseEnteredAndExited, .mouseMoved]
+        func add(_ rect: NSRect) {
+            guard rect.width > 1, rect.height > 1 else { return }
+            let area = NSTrackingArea(rect: rect, options: options, owner: self, userInfo: nil)
+            addTrackingArea(area)
+            zoneTrackers.append(area)
+        }
+        if showsExpandedShape {
+            add(bounds)
+            return
+        }
+        let layout = currentLayout()
+        add(layout.focusPrimary)
+        add(layout.focusStop)
+        add(layout.center)
+        add(layout.volume)
+        add(layout.slider)
+        add(bounds)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -1090,14 +1123,22 @@ final class PillRootView: NSView {
             path.stroke()
         }
         path.fill()
+        let layout = currentLayout()
+        if layout.slider.width > 1 {
+            drawVolumeSlider(layout.slider)
+        }
     }
 
     override func mouseEntered(with event: NSEvent) {
-        onEntered?()
+        onPointer?()
     }
 
     override func mouseExited(with event: NSEvent) {
-        onExited?()
+        onPointer?()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        onPointer?()
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -1117,69 +1158,138 @@ final class PillRootView: NSView {
         trackClickOrDrag(clickCount: max(1, event.clickCount))
     }
 
-    /// A small click toggles focus. A double-click toggles mute. A drag along
-    /// the attached edge parks the notch. Hover (not click) expands the Touch Bar.
+    /// A small click hits the zone under the pointer. A drag along the attached
+    /// edge parks the notch. A drag on the volume slider sets the level.
+    /// Hover of the center (not a click) expands the Touch Bar.
     private func trackClickOrDrag(clickCount: Int) {
         guard let window else {
-            onEntered?()
+            onPointer?()
             return
         }
         onPress?()
         let startMouse = NSEvent.mouseLocation
         let startOrigin = window.frame.origin
+        let startLocal = convert(window.convertPoint(fromScreen: startMouse), from: nil)
+        let zone = currentLayout().zone(containing: startLocal)
         let edge = PillPlacement.edge
-        var moved = false
-        var upClickCount = clickCount
+        var movedNotch = false
+        var scrubbed = false
         while let next = window.nextEvent(
             matching: [.leftMouseDragged, .leftMouseUp],
             until: .distantFuture,
             inMode: .eventTracking,
             dequeue: true
         ) {
-            if next.type == .leftMouseUp {
-                upClickCount = max(upClickCount, next.clickCount)
-                break
-            }
+            if next.type == .leftMouseUp { break }
             let mouse = NSEvent.mouseLocation
             let dx = mouse.x - startMouse.x
             let dy = mouse.y - startMouse.y
-            let delta: CGFloat
+            let along: CGFloat
+            let across: CGFloat
             switch edge {
             case .topCenter, .bottomCenter:
-                delta = dx
+                along = dx
+                across = dy
             case .leftMid, .rightMid:
-                delta = dy
+                along = dy
+                across = dx
             }
-            // 3pt was eating real clicks on the side edges, where the drag
-            // axis is vertical and a press always jitters a few points.
-            if abs(delta) > 10 {
-                moved = true
-                switch edge {
-                case .topCenter, .bottomCenter:
-                    onDrag?(NSPoint(x: startOrigin.x + dx, y: startOrigin.y))
-                case .leftMid, .rightMid:
-                    onDrag?(NSPoint(x: startOrigin.x, y: startOrigin.y + dy))
-                }
+            if scrubbed {
+                let local = convert(window.convertPoint(fromScreen: mouse), from: nil)
+                onVolumeScrub?(local)
+                continue
+            }
+            if movedNotch {
+                dragNotch(dx: dx, dy: dy, from: startOrigin, edge: edge)
+                continue
+            }
+            let onSlider = zone == .volume || zone == .volumeSlider
+            if onSlider, abs(across) > 5, abs(across) >= abs(along) {
+                scrubbed = true
+                let local = convert(window.convertPoint(fromScreen: mouse), from: nil)
+                onVolumeScrub?(local)
+            } else if abs(along) > 10 {
+                movedNotch = true
+                dragNotch(dx: dx, dy: dy, from: startOrigin, edge: edge)
             }
         }
-        if moved {
-            lastClickUp = .distantPast
+        if movedNotch {
             onDragEnd?()
             return
         }
-        let now = Date()
-        let gap = now.timeIntervalSince(lastClickUp)
-        let travel = hypot(NSEvent.mouseLocation.x - lastClickPoint.x, NSEvent.mouseLocation.y - lastClickPoint.y)
-        let systemDouble = upClickCount >= 2
-        let timedDouble = gap < NSEvent.doubleClickInterval && gap > 0.02 && travel < 12 && lastClickUp != .distantPast
-        if systemDouble || timedDouble {
-            lastClickUp = .distantPast
-            onDoubleClick?()
-        } else {
-            lastClickUp = now
-            lastClickPoint = NSEvent.mouseLocation
-            onClick?()
+        if scrubbed { return }
+        switch zone {
+        case .focusPrimary:
+            onFocusPrimary?()
+        case .focusStop:
+            onFocusStop?()
+        case .center:
+            onCenterClick?()
+        case .volume, .volumeSlider:
+            onVolumeClick?()
+        case nil:
+            break
         }
+        _ = clickCount
+    }
+
+    private func dragNotch(dx: CGFloat, dy: CGFloat, from origin: NSPoint, edge: PillEdge) {
+        switch edge {
+        case .topCenter, .bottomCenter:
+            onDrag?(NSPoint(x: origin.x + dx, y: origin.y))
+        case .leftMid, .rightMid:
+            onDrag?(NSPoint(x: origin.x, y: origin.y + dy))
+        }
+    }
+
+    private func drawVolumeSlider(_ capsule: NSRect) {
+        let edge = NotchEdgeKind(PillPlacement.edge)
+        let geometry = ZonePolicy.sliderGeometry(capsule: capsule, edge: edge)
+        let radius = min(14, capsule.width / 2, capsule.height / 2)
+        let fill = PillPlacement.theme.fillColor
+        let path = NSBezierPath(roundedRect: capsule, xRadius: radius, yRadius: radius)
+        fill.setFill()
+        path.fill()
+        NSColor.white.withAlphaComponent(0.16).setStroke()
+        path.lineWidth = 1
+        path.stroke()
+
+        let muted = SystemVolume.isMuted()
+        let level = CGFloat(SystemVolume.volume() ?? 0)
+        let trackPath = NSBezierPath(roundedRect: geometry.track, xRadius: geometry.track.width / 2, yRadius: geometry.track.height / 2)
+        NSColor.white.withAlphaComponent(0.22).setFill()
+        trackPath.fill()
+        if !muted, level > 0.01 {
+            let amount = geometry.fillRect(fraction: level, edge: edge)
+            if amount.width > 0.5, amount.height > 0.5 {
+                NSGraphicsContext.saveGraphicsState()
+                trackPath.addClip()
+                NSColor.white.setFill()
+                amount.fill()
+                NSGraphicsContext.restoreGraphicsState()
+            }
+        }
+        let label = muted ? "🔇" : "\(Int((level * 100).rounded()))%"
+        drawSliderLabel(label, in: geometry.label)
+    }
+
+    private func drawSliderLabel(_ text: String, in rect: NSRect) {
+        var point: CGFloat = 14 * PillPlacement.size.scale
+        var font = NotchFont(size: point, weight: .bold)
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white,
+            .kern: -0.35,
+        ]
+        var textSize = (text as NSString).size(withAttributes: attributes)
+        while point > 9, textSize.width > rect.width - 2 || textSize.height > rect.height - 1 {
+            point -= 0.5
+            font = NotchFont(size: point, weight: .bold)
+            attributes[.font] = font
+            textSize = (text as NSString).size(withAttributes: attributes)
+        }
+        let origin = NSPoint(x: rect.midX - textSize.width / 2, y: rect.midY - textSize.height / 2)
+        (text as NSString).draw(at: origin, withAttributes: attributes)
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -1371,15 +1481,14 @@ enum PillShape {
     }
 }
 
-/// Centered collapsed label. Idle shows “Touch Bar”; focus shows the timer.
-/// All phases share the idle SF Pro Rounded premium styling (weight, tracking,
-/// optical centering), scaled with notch size. Optional volume % flash.
+/// Three collapsed zones. Left is the focus control (timer, then pause/stop).
+/// Center is “Touch Bar”, or whole minutes while a session exists.
+/// Right is the speaker. Hover highlight marks the live hit target.
 final class CollapsedChromeView: NSView {
     var edge: PillEdge = .topCenter
-    var volumeFlash: String?
-    /// Nil hides the readout. Zero is a real level.
-    var volumePercent: Int?
-    var volumeMuted = false
+    var hotZone: ZoneID? {
+        didSet { if hotZone != oldValue { needsDisplay = true } }
+    }
 
     override var isOpaque: Bool { false }
 
@@ -1387,13 +1496,17 @@ final class CollapsedChromeView: NSView {
 
     override func isAccessibilityElement() -> Bool { !isHidden }
 
-    override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
 
     override func accessibilityLabel() -> String? {
         if isHidden { return nil }
-        if volumeMuted { return L("Muted") }
-        if let volumeFlash { return volumeFlash }
-        return FocusSession.shared.notchLabel
+        let session = FocusSession.shared
+        switch session.phase {
+        case .idle:
+            return L("Touch Bar")
+        case .running, .paused:
+            return session.notchLabel
+        }
     }
 
     func refreshLabel() {
@@ -1401,176 +1514,229 @@ final class CollapsedChromeView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        if volumePercent != nil {
-            drawVolumeHero()
-            return
-        }
-        drawNotchLabel()
-    }
-
-    /// Large percent or 🔇. The panel grows while this is up so it is not a tiny flash.
-    private func drawVolumeHero() {
-        let percent = volumePercent ?? 0
-        let hero = (volumeMuted ? "🔇" : "\(percent)%") as NSString
-        let size = (volumeMuted ? 34 : 32) * PillPlacement.size.scale
-        let font = Self.roundedFont(size: size, weight: .bold)
-        let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.9)
-        shadow.shadowBlurRadius = 6
-        shadow.shadowOffset = NSSize(width: 0, height: -1)
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: NSColor.white,
-            .kern: -0.4,
-            .shadow: shadow,
-        ]
-        let textSize = hero.size(withAttributes: attributes)
-        if !volumeMuted, let icon = Self.speakerImage(pointSize: size * 0.72) {
-            let iconSize = icon.size
-            // Drawn as an image, then the percent. Packaged below as a row.
-            drawHeroRow(icon: icon, iconSize: iconSize, text: hero, textSize: textSize, attributes: attributes)
-            return
-        }
-        drawCentered(hero, size: textSize, attributes: attributes)
-    }
-
-    private func drawHeroRow(
-        icon: NSImage,
-        iconSize: NSSize,
-        text: NSString,
-        textSize: NSSize,
-        attributes: [NSAttributedString.Key: Any]
-    ) {
-        let gap: CGFloat = 6
-        let row = NSSize(width: iconSize.width + gap + textSize.width, height: max(iconSize.height, textSize.height))
-        if edge.isVerticalEdge {
-            NSGraphicsContext.saveGraphicsState()
-            let transform = NSAffineTransform()
-            if edge.attachesLeft {
-                transform.translateX(by: bounds.midX - row.height / 2, yBy: bounds.midY + row.width / 2)
-                transform.rotate(byDegrees: -90)
-            } else {
-                transform.translateX(by: bounds.midX + row.height / 2, yBy: bounds.midY - row.width / 2)
-                transform.rotate(byDegrees: 90)
+        let layout = ZonePolicy.layout(
+            visual: bounds,
+            edge: NotchEdgeKind(edge),
+            scale: PillPlacement.size.scale,
+            sliderVisible: false,
+            focusActive: FocusSession.shared.phase != .idle
+        )
+        NSGraphicsContext.saveGraphicsState()
+        PillShape.path(in: bounds, expanded: false, edge: edge).addClip()
+        drawDividers(layout)
+        if let hotZone {
+            let hot = hotRect(hotZone, layout: layout)
+            if hot.width > 1 {
+                let bubble = hot.insetBy(dx: 3, dy: 3)
+                NSColor.white.withAlphaComponent(0.10).setFill()
+                NSBezierPath(roundedRect: bubble, xRadius: 6, yRadius: 6).fill()
             }
-            transform.concat()
-            let iconY = (row.height - iconSize.height) / 2
-            icon.draw(in: NSRect(x: 0, y: iconY, width: iconSize.width, height: iconSize.height))
-            text.draw(at: NSPoint(x: iconSize.width + gap, y: (row.height - textSize.height) / 2), withAttributes: attributes)
-            NSGraphicsContext.restoreGraphicsState()
-        } else {
-            let origin = NSPoint(
-                x: floor((bounds.width - row.width) / 2),
-                y: floor((bounds.height - row.height) / 2) - 0.5
-            )
-            let iconY = origin.y + (row.height - iconSize.height) / 2
-            icon.draw(in: NSRect(x: origin.x, y: iconY, width: iconSize.width, height: iconSize.height))
-            text.draw(
-                at: NSPoint(x: origin.x + iconSize.width + gap, y: origin.y + (row.height - textSize.height) / 2),
-                withAttributes: attributes
-            )
+        }
+        drawFocus(layout)
+        drawCenter(layout.center)
+        drawVolumeWing(layout.volume)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func hotRect(_ zone: ZoneID, layout: ZonePolicy.Layout) -> CGRect {
+        switch zone {
+        case .focusPrimary: return layout.focusPrimary
+        case .focusStop: return layout.focusStop
+        case .center: return layout.center
+        case .volume, .volumeSlider: return layout.volume
         }
     }
 
-    private func drawCentered(_ title: NSString, size textSize: NSSize, attributes: [NSAttributedString.Key: Any]) {
+    private func drawDividers(_ layout: ZonePolicy.Layout) {
+        let color = NSColor.white.withAlphaComponent(0.22)
+        color.setStroke()
+        let ear = min(PillMetrics.scaledEarRadius, bounds.height * 0.35, bounds.width * 0.2)
+        let tip = min(PillMetrics.scaledBottomRadius, 8)
         if edge.isVerticalEdge {
-            NSGraphicsContext.saveGraphicsState()
-            let transform = NSAffineTransform()
-            if edge.attachesLeft {
-                transform.translateX(by: bounds.midX - textSize.height / 2 - 0.5, yBy: bounds.midY + textSize.width / 2)
-                transform.rotate(byDegrees: -90)
-            } else {
-                transform.translateX(by: bounds.midX + textSize.height / 2 + 0.5, yBy: bounds.midY - textSize.width / 2)
-                transform.rotate(byDegrees: 90)
+            strokeAcross(layout.center.maxY, insetStart: 4, insetEnd: 4, vertical: false)
+            strokeAcross(layout.volume.maxY, insetStart: 4, insetEnd: 4, vertical: false)
+            if layout.focusStop.height > 1 {
+                strokeAcross(layout.focusStop.maxY, insetStart: 4, insetEnd: 4, vertical: false)
             }
-            transform.concat()
-            title.draw(at: .zero, withAttributes: attributes)
-            NSGraphicsContext.restoreGraphicsState()
         } else {
-            let origin = NSPoint(
-                x: floor((bounds.width - textSize.width) / 2),
-                y: floor((bounds.height - textSize.height) / 2) - 0.5
-            )
-            title.draw(at: origin, withAttributes: attributes)
+            strokeAcross(layout.focusWing.maxX, insetStart: ear, insetEnd: tip, vertical: true)
+            strokeAcross(layout.center.maxX, insetStart: ear, insetEnd: tip, vertical: true)
+            if layout.focusStop.width > 1 {
+                strokeAcross(layout.focusPrimary.maxX, insetStart: 4, insetEnd: 4, vertical: true)
+            }
         }
     }
 
-    private func drawNotchLabel() {
+    /// `vertical` means the divider itself is a vertical line (top/bottom notches).
+    private func strokeAcross(_ position: CGFloat, insetStart: CGFloat, insetEnd: CGFloat, vertical: Bool) {
+        let path = NSBezierPath()
+        path.lineWidth = 1
+        if vertical {
+            let top = bounds.maxY - insetStart
+            let bottom = bounds.minY + insetEnd
+            guard top > bottom + 4 else { return }
+            path.move(to: NSPoint(x: position, y: bottom))
+            path.line(to: NSPoint(x: position, y: top))
+        } else {
+            let left = bounds.minX + insetStart
+            let right = bounds.maxX - insetEnd
+            guard right > left + 4 else { return }
+            path.move(to: NSPoint(x: left, y: position))
+            path.line(to: NSPoint(x: right, y: position))
+        }
+        path.stroke()
+    }
+
+    private func drawFocus(_ layout: ZonePolicy.Layout) {
         let session = FocusSession.shared
-        let title = session.notchLabel as NSString
-        let font = Self.labelFont()
+        let scale = PillPlacement.size.scale
+        switch session.phase {
+        case .idle:
+            drawSymbol("timer", in: layout.focusPrimary, pointSize: 15 * scale, fallback: .clock)
+        case .running:
+            drawSymbol("pause.fill", in: layout.focusPrimary, pointSize: 12 * scale, fallback: .pause)
+            drawSymbol("stop.fill", in: layout.focusStop, pointSize: 11 * scale, fallback: .stop)
+        case .paused:
+            drawSymbol("play.fill", in: layout.focusPrimary, pointSize: 12 * scale, fallback: .resume)
+            drawSymbol("stop.fill", in: layout.focusStop, pointSize: 11 * scale, fallback: .stop)
+        }
+    }
+
+    private func drawCenter(_ rect: CGRect) {
+        let session = FocusSession.shared
+        let scale = PillPlacement.size.scale
+        let title = session.notchLabel
+        let minutes = session.phase != .idle
+        let size = (minutes ? 17 : 15.5) * scale
+        let weight: NSFont.Weight = minutes ? .semibold : .medium
+        let alpha = session.labelAlpha
+        if edge.isVerticalEdge && !minutes {
+            drawRotated(title, in: rect, size: size, weight: weight, alpha: alpha)
+        } else if edge.isVerticalEdge && !textFits(title, in: rect, size: size, weight: weight) {
+            drawRotated(title, in: rect, size: size, weight: weight, alpha: alpha)
+        } else {
+            drawFitted(title, in: rect, size: size, weight: weight, alpha: alpha)
+        }
+    }
+
+    private func drawVolumeWing(_ rect: CGRect) {
+        let name = SystemVolume.isMuted() ? "speaker.slash.fill" : "speaker.wave.2.fill"
+        drawSymbol(name, in: rect, pointSize: 14 * PillPlacement.size.scale, fallback: .speaker)
+    }
+
+    private func textFits(_ text: String, in rect: CGRect, size: CGFloat, weight: NSFont.Weight) -> Bool {
+        let font = NotchFont(size: size, weight: weight)
+        let measured = (text as NSString).size(withAttributes: [.font: font, .kern: -0.35])
+        return measured.width <= rect.width - 4 && measured.height <= rect.height - 2
+    }
+
+    private func drawFitted(_ text: String, in rect: CGRect, size: CGFloat, weight: NSFont.Weight, alpha: CGFloat) {
+        var point = size
+        var font = NotchFont(size: point, weight: weight)
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white.withAlphaComponent(alpha),
+            .kern: -0.35,
+        ]
+        var textSize = (text as NSString).size(withAttributes: attributes)
+        while point > 10, textSize.width > rect.width - 4 || textSize.height > rect.height - 2 {
+            point -= 0.5
+            font = NotchFont(size: point, weight: weight)
+            attributes[.font] = font
+            textSize = (text as NSString).size(withAttributes: attributes)
+        }
+        let origin = NSPoint(x: floor(rect.midX - textSize.width / 2), y: floor(rect.midY - textSize.height / 2) - 0.5)
+        (text as NSString).draw(at: origin, withAttributes: attributes)
+    }
+
+    /// Same rotation the 0.4.3 side label used, centered on this zone.
+    private func drawRotated(_ text: String, in rect: CGRect, size: CGFloat, weight: NSFont.Weight, alpha: CGFloat) {
+        let font = NotchFont(size: size, weight: weight)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: NSColor.white.withAlphaComponent(session.labelAlpha),
-            .kern: Self.tracking,
+            .foregroundColor: NSColor.white.withAlphaComponent(alpha),
+            .kern: -0.35,
         ]
-        let textSize = title.size(withAttributes: attributes)
-        let showPlay = session.phase == .idle
-        if showPlay {
-            drawIdleLabel(title: title, textSize: textSize, attributes: attributes)
+        let textSize = (text as NSString).size(withAttributes: attributes)
+        NSGraphicsContext.saveGraphicsState()
+        let transform = NSAffineTransform()
+        if edge.attachesLeft {
+            transform.translateX(by: rect.midX - textSize.height / 2, yBy: rect.midY + textSize.width / 2)
+            transform.rotate(byDegrees: -90)
+        } else {
+            transform.translateX(by: rect.midX + textSize.height / 2, yBy: rect.midY - textSize.width / 2)
+            transform.rotate(byDegrees: 90)
+        }
+        transform.concat()
+        (text as NSString).draw(at: .zero, withAttributes: attributes)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private enum SymbolFallback {
+        case clock, pause, stop, resume, speaker
+    }
+
+    private func drawSymbol(_ name: String, in rect: CGRect, pointSize: CGFloat, fallback: SymbolFallback) {
+        guard rect.width > 2, rect.height > 2 else { return }
+        let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
+            .applying(NSImage.SymbolConfiguration(hierarchicalColor: NSColor.white.withAlphaComponent(0.94)))
+        if let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config) {
+            let side = pointSize * 1.2
+            let box = CGRect(x: rect.midX - side / 2, y: rect.midY - side / 2, width: side, height: side)
+            image.isTemplate = false
+            image.draw(in: box)
             return
         }
-        drawCentered(title, size: textSize, attributes: attributes)
+        drawFallback(fallback, in: rect)
     }
 
-    /// Small ▶ only while idle, so a first click has something to aim at.
-    private func drawIdleLabel(title: NSString, textSize: NSSize, attributes: [NSAttributedString.Key: Any]) {
-        let playFont = Self.roundedFont(size: 8 * PillPlacement.size.scale, weight: .semibold)
-        let playAttrs: [NSAttributedString.Key: Any] = [
-            .font: playFont,
-            .foregroundColor: NSColor.white.withAlphaComponent(0.55),
-        ]
-        let play = "▶" as NSString
-        let playSize = play.size(withAttributes: playAttrs)
-        let gap: CGFloat = 4
-        let row = NSSize(width: playSize.width + gap + textSize.width, height: max(playSize.height, textSize.height))
-        if edge.isVerticalEdge {
-            NSGraphicsContext.saveGraphicsState()
-            let transform = NSAffineTransform()
-            if edge.attachesLeft {
-                transform.translateX(by: bounds.midX - row.height / 2, yBy: bounds.midY + row.width / 2)
-                transform.rotate(byDegrees: -90)
-            } else {
-                transform.translateX(by: bounds.midX + row.height / 2, yBy: bounds.midY - row.width / 2)
-                transform.rotate(byDegrees: 90)
-            }
-            transform.concat()
-            play.draw(at: NSPoint(x: 0, y: (row.height - playSize.height) / 2), withAttributes: playAttrs)
-            title.draw(at: NSPoint(x: playSize.width + gap, y: (row.height - textSize.height) / 2), withAttributes: attributes)
-            NSGraphicsContext.restoreGraphicsState()
-        } else {
-            let origin = NSPoint(
-                x: floor((bounds.width - row.width) / 2),
-                y: floor((bounds.height - row.height) / 2) - 0.5
-            )
-            play.draw(at: NSPoint(x: origin.x, y: origin.y + (row.height - playSize.height) / 2 + 0.5), withAttributes: playAttrs)
-            title.draw(at: NSPoint(x: origin.x + playSize.width + gap, y: origin.y), withAttributes: attributes)
+    private func drawFallback(_ kind: SymbolFallback, in rect: CGRect) {
+        NSColor.white.withAlphaComponent(0.92).setStroke()
+        NSColor.white.withAlphaComponent(0.92).setFill()
+        let side = min(rect.width, rect.height) * 0.42
+        let box = CGRect(x: rect.midX - side / 2, y: rect.midY - side / 2, width: side, height: side)
+        switch kind {
+        case .clock:
+            let ring = NSBezierPath(ovalIn: box)
+            ring.lineWidth = 1.4
+            ring.stroke()
+            let hands = NSBezierPath()
+            hands.move(to: NSPoint(x: box.midX, y: box.midY))
+            hands.line(to: NSPoint(x: box.midX, y: box.maxY - 1.5))
+            hands.move(to: NSPoint(x: box.midX, y: box.midY))
+            hands.line(to: NSPoint(x: box.maxX - 2, y: box.midY))
+            hands.lineWidth = 1.3
+            hands.stroke()
+        case .pause:
+            let barW = side * 0.28
+            let gap = side * 0.18
+            NSBezierPath(roundedRect: CGRect(x: box.midX - gap / 2 - barW, y: box.minY, width: barW, height: side), xRadius: 1, yRadius: 1).fill()
+            NSBezierPath(roundedRect: CGRect(x: box.midX + gap / 2, y: box.minY, width: barW, height: side), xRadius: 1, yRadius: 1).fill()
+        case .stop:
+            NSBezierPath(roundedRect: box.insetBy(dx: side * 0.12, dy: side * 0.12), xRadius: 2, yRadius: 2).fill()
+        case .resume:
+            let triangle = NSBezierPath()
+            triangle.move(to: NSPoint(x: box.minX + 1, y: box.minY))
+            triangle.line(to: NSPoint(x: box.maxX, y: box.midY))
+            triangle.line(to: NSPoint(x: box.minX + 1, y: box.maxY))
+            triangle.close()
+            triangle.fill()
+        case .speaker:
+            let mark = (SystemVolume.isMuted() ? "🔇" : "♪") as NSString
+            let font = NotchFont(size: side, weight: .semibold)
+            let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
+            let textSize = mark.size(withAttributes: attributes)
+            mark.draw(at: NSPoint(x: rect.midX - textSize.width / 2, y: rect.midY - textSize.height / 2), withAttributes: attributes)
         }
     }
+}
 
-    /// Same premium idle face for the timer.
-    private static func labelFont() -> NSFont {
-        roundedFont(size: 11.5 * PillPlacement.size.scale, weight: .medium)
+func NotchFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
+    let base = NSFont.systemFont(ofSize: size, weight: weight)
+    if let rounded = base.fontDescriptor.withDesign(.rounded) {
+        return NSFont(descriptor: rounded, size: size) ?? base
     }
-
-    private static func roundedFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
-        let base = NSFont.systemFont(ofSize: size, weight: weight)
-        if let rounded = base.fontDescriptor.withDesign(.rounded) {
-            return NSFont(descriptor: rounded, size: size) ?? base
-        }
-        return base
-    }
-
-    private static func speakerImage(pointSize: CGFloat) -> NSImage? {
-        let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .bold)
-            .applying(NSImage.SymbolConfiguration(hierarchicalColor: .white))
-        guard let image = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: nil)?
-            .withSymbolConfiguration(config) else { return nil }
-        image.isTemplate = false
-        return image
-    }
-
-    private static let tracking: CGFloat = -0.35
+    return base
 }
 
 final class FallbackView: NSView {

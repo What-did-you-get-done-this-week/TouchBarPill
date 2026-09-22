@@ -98,32 +98,6 @@ enum LaunchAtLogin {
         return .updated
     }
 
-    static func note() -> String {
-        if let lastError {
-            return lastError
-        }
-        switch gate {
-        case .requiresApproval:
-            return L("macOS still needs your OK before TouchBarPill can open at login. Allow it under System Settings → General → Login Items.")
-        case .unsupported:
-            return L("Opening at login requires macOS 13 or later.")
-        case .enabled:
-            return L("TouchBarPill will open when you log in. Turn this off to remove it from Login Items.")
-        case .notRegistered, .notFound:
-            return L("Off by default. Turn it on here or from the menu-bar icon. macOS may then ask you to allow TouchBarPill under System Settings → General → Login Items.")
-        }
-    }
-
-    static var needsSettingsButton: Bool {
-        if lastError != nil { return true }
-        switch gate {
-        case .requiresApproval, .notFound, .unsupported:
-            return true
-        case .enabled, .notRegistered:
-            return false
-        }
-    }
-
     static func menuTitle() -> String {
         if gate == .requiresApproval {
             return L("Open at Login (approval needed)")

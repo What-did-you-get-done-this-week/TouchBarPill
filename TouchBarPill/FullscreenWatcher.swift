@@ -19,7 +19,7 @@ enum FullscreenKind: Equatable {
         case .system: return "system"
         case .cinemaWindow: return "cinema-window"
         case .systemAndCinema: return "system+cinema-window"
-        case .manual: return "manual"
+        case .manual: return "invisible"
         }
     }
 }

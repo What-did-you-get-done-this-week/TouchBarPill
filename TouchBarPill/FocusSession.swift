@@ -29,34 +29,26 @@ final class FocusSession {
         return elapsed + Date().timeIntervalSince(runStartedAt)
     }
 
-    var formattedTime: String {
-        let total = max(0, Int(displayElapsed.rounded(.down)))
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let seconds = total % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%d:%02d", minutes, seconds)
+    /// Whole minutes already elapsed. The center label uses this and does not tick seconds.
+    var wholeMinutes: Int {
+        ZonePolicy.wholeMinutes(elapsed: displayElapsed)
     }
 
-    /// Compact notch label for the current phase.
+    /// Center title. Idle keeps the product name. A session shows whole minutes only.
     var notchLabel: String {
         switch phase {
         case .idle:
             return L("Touch Bar")
-        case .running:
-            return formattedTime
-        case .paused:
-            return "⏸ \(formattedTime)"
+        case .running, .paused:
+            return ZonePolicy.minuteLabel(elapsed: displayElapsed)
         }
     }
 
-    /// Opacity hint for the label (paused is slightly dimmer).
+    /// Opacity hint for the center label. Paused minutes stay put and read quieter.
     var labelAlpha: CGFloat {
         switch phase {
-        case .idle: return 0.88
-        case .running: return 0.94
+        case .idle: return 0.92
+        case .running: return 0.96
         case .paused: return 0.62
         }
     }
@@ -113,10 +105,20 @@ final class FocusSession {
 
     private func startTick() {
         stopTick()
-        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            self?.postChange()
+        scheduleMinuteTick()
+    }
+
+    /// Redraw when the whole minute changes. No per-second tick.
+    private func scheduleMinuteTick() {
+        stopTick()
+        guard phase == .running else { return }
+        let wait = ZonePolicy.secondsUntilNextMinute(elapsed: displayElapsed)
+        let timer = Timer(timeInterval: wait, repeats: false) { [weak self] _ in
+            guard let self, self.phase == .running else { return }
+            self.postChange()
+            self.scheduleMinuteTick()
         }
-        timer.tolerance = 0.05
+        timer.tolerance = 0.15
         RunLoop.main.add(timer, forMode: .common)
         tick = timer
     }

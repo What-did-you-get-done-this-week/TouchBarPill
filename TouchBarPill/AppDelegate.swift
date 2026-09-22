@@ -14,12 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let sizeMenu = NSMenu()
     private var focusToggleItem: NSMenuItem!
     private var resetFocusItem: NSMenuItem!
-    private var cinemaItem: NSMenuItem!
     private var didTeardown = false
     private var mirror: DFRMirror!
     private var pill: PillPanelController!
-    /// Created on first use, which is during launch — not before NSApp.run.
-    private lazy var preferences = PreferencesController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -29,7 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Never register a login item here. The old default-on path called
         // SMAppService at launch and macOS answered with an admin password sheet.
         LaunchAtLogin.forgetLegacyPreference()
-        preferences.attach(mirror: mirror)
 
         mirror.stateHandler = { [weak self] in
             self?.mirrorChanged()
@@ -59,11 +55,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch FocusSession.shared.phase {
         case .running:
             focusToggleItem.title = L("Pause Focus")
-        case .idle, .paused:
+        case .paused:
+            focusToggleItem.title = L("Resume Focus")
+        case .idle:
             focusToggleItem.title = L("Start Focus")
         }
         resetFocusItem.isEnabled = FocusSession.shared.phase != .idle
-        cinemaItem.state = PillPlacement.cinemaMode ? .on : .off
         syncDisplayItem()
         rebuildDisplayMenu()
         rebuildPositionMenu()
@@ -118,15 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         resetFocusItem.target = self
         menu.addItem(resetFocusItem)
 
-        cinemaItem = NSMenuItem(title: L("Cinema mode (force hide)"), action: #selector(toggleCinema), keyEquivalent: "")
-        cinemaItem.target = self
-        menu.addItem(cinemaItem)
-
         menu.addItem(.separator())
-
-        let preferencesItem = NSMenuItem(title: L("Preferences…"), action: #selector(showPreferences(_:)), keyEquivalent: ",")
-        preferencesItem.target = self
-        menu.addItem(preferencesItem)
 
         loginItem = NSMenuItem(title: L("Open at Login"), action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         loginItem.target = self
@@ -168,7 +157,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func mirrorChanged() {
         pill.mirrorStateChanged()
-        preferences.refresh()
     }
 
     @objc private func togglePill() {
@@ -179,10 +167,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             pill.show()
             UserDefaults.standard.set(false, forKey: "PillHidden")
         }
-    }
-
-    @objc private func showPreferences(_ sender: Any?) {
-        preferences.show()
     }
 
     @objc private func togglePin() {
@@ -303,6 +287,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.state = theme == current ? .on : .off
             themeMenu.addItem(item)
         }
+        themeMenu.addItem(.separator())
+        let invisible = NSMenuItem(title: L("Invisible"), action: #selector(toggleCinema), keyEquivalent: "")
+        invisible.target = self
+        invisible.state = PillPlacement.cinemaMode ? .on : .off
+        themeMenu.addItem(invisible)
     }
 
     private func rebuildSizeMenu() {
@@ -321,7 +310,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let outcome = LaunchAtLogin.setEnabled(!LaunchAtLogin.isOn)
         loginItem.state = LaunchAtLogin.isOn ? .on : .off
         loginItem.title = LaunchAtLogin.menuTitle()
-        preferences.refresh()
         if outcome == .needsSettings {
             LaunchAtLogin.presentHelp()
         }
@@ -376,7 +364,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         RevealDelay: \(String(format: "%.2f", PillPlacement.revealDelay)) FullscreenHideDelay: \(String(format: "%.2f", PillPlacement.fullscreenHideDelay))
         Focus: phase \(String(describing: FocusSession.shared.phase)) elapsed \(String(format: "%.0f", FocusSession.shared.displayElapsed))s label \(FocusSession.shared.notchLabel)
         Fullscreen: \(FullscreenWatcher.shared.diagnosticToken)
-        CinemaMode: \(PillPlacement.cinemaMode ? "on" : "off")
+        Invisible: \(PillPlacement.cinemaMode ? "on" : "off")
         CinemaCoverage: \(String(format: "%.0f%%", Double(FullscreenWatcher.shared.frontCoverage * 100)))
         ExpandedPlacement: follows \(PillPlacement.edge.rawValue) on the chosen display
         \(LaunchAtLogin.diagnosticLine())

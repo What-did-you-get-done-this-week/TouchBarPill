@@ -92,20 +92,17 @@ enum HitZoneWidth: String, CaseIterable {
     }
 }
 
-/// Extra size while the volume readout is on the notch. Zero the rest of the time.
+/// The volume slider anchored to the right wing. It does not expand the Touch Bar.
 /// The panel controller owns the lifetime; layout only reads it.
 enum VolumeChrome {
-    /// Added to the free-edge depth (32 → about 68) so a large % fits.
-    static var extraDepth: CGFloat = 0
-    /// Added to the long axis so “100%” and the mute mark are not clipped.
-    static var extraSpan: CGFloat = 0
-    static var isActive: Bool { extraDepth > 0 || extraSpan > 0 }
+    static var sliderVisible = false
 }
 
 /// Persisted placement, pin, and notch-chrome settings.
 /// Launch never writes these. Missing keys mean: top center, not pinned,
-/// discreet fade at 52% opacity (always on), black theme, medium size.
-/// Fullscreen hit zone is always Wide.
+/// discreet fade at 52% opacity (always on), soft accent, small size.
+/// A saved theme, size, or edge is kept. Resetting defaults (deleting the keys)
+/// returns to those values. Fullscreen hit zone is always Wide.
 enum PillPlacement {
     static let didChange = Notification.Name("PillPlacementDidChange")
 
@@ -211,26 +208,26 @@ enum PillPlacement {
         return min(max(raw, 0.3), 8)
     }
 
-    /// Collapsed chrome theme. Default black.
+    /// Collapsed chrome theme. Soft accent when the key is missing.
     static var theme: NotchTheme {
         get {
             if let raw = UserDefaults.standard.string(forKey: themeKey),
                let theme = NotchTheme(rawValue: raw) {
                 return theme
             }
-            return .black
+            return .softAccent
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: themeKey) }
     }
 
-    /// Collapsed notch size. Default medium (0.4.0 footprint).
+    /// Collapsed notch size. Small when the key is missing.
     static var size: NotchSize {
         get {
             if let raw = UserDefaults.standard.string(forKey: sizeKey),
                let size = NotchSize(rawValue: raw) {
                 return size
             }
-            return .medium
+            return .small
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: sizeKey) }
     }
@@ -337,17 +334,10 @@ enum DisplayList {
     static let sideHitPad: CGFloat = 14
 
     /// Visual collapsed notch size (theme/size prefs). Side edges swap axes.
-    /// Volume HUD adds depth and span while the big readout is on screen.
+    /// The volume slider is extra panel space, not part of this silhouette.
     static func visualCollapsedSize(for edge: PillEdge = PillPlacement.edge) -> NSSize {
-        let scale = PillPlacement.size.scale
-        let base = NSSize(
-            width: (PillMetrics.collapsedSize.width + VolumeChrome.extraSpan) * scale,
-            height: (PillMetrics.collapsedSize.height + VolumeChrome.extraDepth) * scale
-        )
-        if edge.isVerticalEdge {
-            return NSSize(width: base.height, height: base.width)
-        }
-        return base
+        let size = ZonePolicy.visualSize(edge: NotchEdgeKind(edge), scale: PillPlacement.size.scale)
+        return NSSize(width: size.width, height: size.height)
     }
 
     /// Transparent inward pad. Side tabs always keep a little pad so the wheel
@@ -364,13 +354,14 @@ enum DisplayList {
         immersive: Bool = FullscreenWatcher.shared.isFullscreen
     ) -> NSSize {
         let visual = visualCollapsedSize(for: edge)
-        let pad = interactionPad(for: edge, immersive: immersive)
-        guard pad > 0 else { return visual }
+        let slider = VolumeChrome.sliderVisible ? ZonePolicy.sliderLength * PillPlacement.size.scale : 0
+        let extra = slider + interactionPad(for: edge, immersive: immersive)
+        guard extra > 0 else { return visual }
         switch edge {
         case .topCenter, .bottomCenter:
-            return NSSize(width: visual.width, height: visual.height + pad)
+            return NSSize(width: visual.width, height: visual.height + extra)
         case .leftMid, .rightMid:
-            return NSSize(width: visual.width + pad, height: visual.height)
+            return NSSize(width: visual.width + extra, height: visual.height)
         }
     }
 
@@ -420,6 +411,17 @@ enum DisplayList {
             let clamped = clampY(origin.y, height: size.height, on: screen)
             let center = clamped + size.height / 2
             PillPlacement.offset = center - screen.frame.midY
+        }
+    }
+}
+
+extension NotchEdgeKind {
+    init(_ edge: PillEdge) {
+        switch edge {
+        case .topCenter: self = .top
+        case .bottomCenter: self = .bottom
+        case .leftMid: self = .left
+        case .rightMid: self = .right
         }
     }
 }

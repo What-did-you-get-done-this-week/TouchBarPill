@@ -1,85 +1,80 @@
-COMO ABRIR — TouchBarPill 0.4.3
+COMO ABRIR — TouchBarPill 0.4.4
 ================================
 
 Qué es
 ------
-TouchBarPill es una utilidad de barra de menú. Plegada, es una muesca en el borde que elijas (centro superior por omisión). Al pasar el puntero se expande a la Touch Bar adaptativa en vivo. El foco es un cronómetro abierto (sin meta). En cine la muesca desaparece del todo hasta que el puntero toca la zona del borde.
+TouchBarPill es una utilidad de barra de menú. Plegada, es una muesca de tres zonas en el borde que elijas. En una instalación nueva (o si borras las preferencias) arranca en Acento suave, tamaño S y centro superior. Si ya habías elegido tema, tamaño o borde, se conserva.
 
-Scroll en el notch = volumen. Doble clic = mute. Clic o menú = foco.
-YouTube a pantalla completa debería ocultar la muesca.
+Solo el centro abre la Touch Bar. El ala izquierda es el foco. El ala derecha es el volumen. En cine la muesca desaparece hasta que el puntero toca la zona del borde.
+
+No hay ventana de Preferencias. Todo está en el menú de la barra de menú.
 
 Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
-2. Abre TouchBarPill-0.4.3.app (Escritorio o Descargas).
-   Si macOS bloquea sobrescribir un .app antiguo (MACL), abre la copia de
-   Descargas o TouchBarPill-0.4.3-fresh.app en el Escritorio.
+2. Abre TouchBarPill-0.4.4.app (Descargas) o TouchBarPill-0.4.4-fresh.app (Escritorio).
+   Si macOS bloquea sobrescribir un .app antiguo (MACL), usa la copia fresh.
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
 
-En reposo la etiqueta dice «Touch Bar», con un ▶ pequeño. Clic en la muesca, o el menú Iniciar foco, arranca el cronómetro.
+Tres zonas (centro superior e inferior)
+---------------------------------------
+De izquierda a derecha:
 
-Clic, rueda y puntero (importante)
-----------------------------------
-Scroll en el notch = volumen. Doble clic = mute. Clic o menú = foco.
+- Ala izquierda = foco. En reposo es un icono de reloj (no un triángulo de play). Clic: inicia el foco.
+- Centro = «Touch Bar» cuando no hay sesión. Al pasar el puntero (breve retraso) se expande la Touch Bar adaptativa. Un clic en el centro no cambia el foco.
+- Ala derecha = volumen. Icono de altavoz. Al pasar el puntero aparece una barra de volumen anclada al ala, sin abrir la Touch Bar. La rueda sube o baja el volumen del sistema y el % se lee en esa barra. Clic o doble clic: silencio / reactivar.
 
-- Pasar el puntero (hover): tras un breve retraso (~0,09 s) la muesca se EXPÁNDE a la Touch Bar. Un scroll de volumen cancela esa expansión para que la rueda no abra la tira.
-- Clic en la muesca PLEGADA (también Medio derecha y Medio izquierda): inicia / pausa el FOCO. No fija ni expande la tira. Un movimiento de unos pocos puntos no cuenta como arrastre.
-- Menú de estado: Iniciar foco / Pausar foco (según el estado) y Reiniciar foco. Con el foco en marcha la etiqueta NO se queda en «Touch Bar»: muestra el tiempo en vivo, 0:01, 12:34…
-- Doble clic en la muesca PLEGADA: silencia / reactiva el volumen del sistema. Feedback grande: 🔇 o el % con icono de altavoz, unos 0,8 s. No expande la tira.
-- Rueda, dos dedos en el trackpad, u Opción+scroll sobre la muesca plegada — en cualquier borde, incluida la zona un poco hacia dentro en los lados, y la zona ancha casi invisible en cine —: sube o baja el volumen al momento. El % se lee grande en la muesca. No pide Accesibilidad.
-- Arrastrar por el borde (más de ~10 puntos): mueve la muesca. Al soltar, no cuenta como clic de foco.
+Pasar el puntero por el ala izquierda o la derecha NO abre la Touch Bar y cancela una expansión que estuviera esperando.
 
 Foco
 ----
-- Reposo: «▶ Touch Bar».
-- Clic, o menú Iniciar foco: «0:01», «12:34»… sin meta y sin «Listo».
-- Otro clic, o Pausar foco: pausa (⏸ y el tiempo). Otro clic o Iniciar foco: reanuda.
-- Reiniciar foco: menú de estado o Preferencias. Vuelve a «Touch Bar».
+- Reposo: reloj en el ala izquierda y «Touch Bar» en el centro.
+- Clic en el reloj, o menú Iniciar foco: el centro pasa a minutos enteros, 0m, 1m, 12m… No cuenta los segundos. El ala izquierda pasa a Pausa y Parar.
+- Pausa: los minutos se quedan quietos en el centro. El ala izquierda ofrece Reanudar y Parar.
+- Parar (o menú Reiniciar foco): se acaba la sesión. El centro vuelve a «Touch Bar» y el ala izquierda al reloj.
+- El menú de estado también tiene Iniciar foco / Pausar foco / Reanudar foco y Reiniciar foco.
 - Solo manual. No mira otras apps ni pide Accesibilidad.
-- El tiempo vive en memoria. No se guarda una meta.
 
 Volumen
 -------
-Scroll en el notch = volumen. Doble clic = mute. Clic o menú = foco.
+- Solo el ala derecha y la barra que sale de ella.
+- Rueda, dos dedos u Opción+scroll: volumen del sistema (CoreAudio). Se ve el %.
+- Clic o doble clic: silencio, con 🔇. Otro clic: vuelve el %.
+- No pide micrófono ni Accesibilidad.
 
-- La rueda, el scrub de dos dedos y Opción+scroll actúan enseguida sobre el volumen del sistema (CoreAudio), también en Medio izquierda y Medio derecha.
-- El % (o 🔇) ocupa casi toda la muesca durante ~0,8 s. No es un destello pequeño.
-- En cine, el scroll también revela la muesca un momento para que se vea el %.
-- No pide micrófono ni Accesibilidad. No escanea el contenido de otras apps.
+Medio izquierda y medio derecha
+-------------------------------
+Las mismas tres zonas, apiladas de arriba a abajo: foco, centro, volumen. El reloj, la pausa, parar y el altavoz se leen derechos. «Touch Bar» gira a lo largo del borde (como la etiqueta de 0.4.3) porque no cabe derecho. Los minutos, al ser cortos, se leen derechos en el centro. La barra de volumen sale hacia dentro, perpendicular al borde, para que un arrastre a lo largo del borde siga moviendo la muesca.
 
 Pantalla completa / cine
 ------------------------
 La muesca se oculta (α=0, sin sombra) si ocurre cualquiera de estas:
 - El sistema está en un espacio a pantalla completa o con la barra de menú oculta (diagnóstico: system).
-- La ventana del frente cubre ~98% de la pantalla elegida. Así se detecta el vídeo a pantalla completa del navegador, YouTube incluido, aunque macOS no lo marque como presentación del sistema (diagnóstico: cinema-window). Si coinciden las dos, system+cinema-window.
-- Activas «Modo cine (forzar ocultar)» en el menú de estado (diagnóstico: manual). Sirve si la detección automática no alcanza.
+- La ventana del frente cubre ~98% de la pantalla elegida (diagnóstico: cinema-window). YouTube a pantalla completa entra aquí. Si coinciden las dos: system+cinema-window.
+- Activas Invisible en el submenú Tema (diagnóstico: invisible). Es el antiguo modo cine manual.
 
-Sigue habiendo una zona de impacto ancha en el mismo borde. El puntero en esa zona: la muesca aparece. Al salir, se oculta otra vez. Si la tira está fijada, permanece usable.
+Sigue habiendo una zona de impacto ancha en el mismo borde. El puntero en esa zona: la muesca aparece. Al salir, se oculta otra vez. Si la tira está fijada, permanece usable. Pasar por las alas no abre la Touch Bar; solo el centro.
 
-YouTube a pantalla completa en el navegador debería ocultar la muesca. Compruébalo con Copiar diagnósticos: Fullscreen: cinema-window (y CinemaCoverage cerca de 100%). Si sigue en «no», usa Modo cine.
-
-Detección de la ventana: solo el marco en pantalla (CGWindowList, bounds). No lee títulos, no captura píxeles, no abre archivos de otras apps, no pide Accesibilidad ni «acceso a datos de otras apps». Se revisa al cambiar de espacio o de app, y cada ~0,7 s.
+Detección de la ventana: solo el marco en pantalla (CGWindowList, bounds). No lee títulos, no captura píxeles, no abre archivos de otras apps, no pide Accesibilidad ni «acceso a datos de otras apps».
 
 Aspecto
 -------
-- Medio izquierda y Medio derecha: la misma pestaña que arriba, pegada al borde. Sin filete claro en el borde interior y sin sombra de ventana, para que se lea como muesca y no como una pastilla flotante.
-- Tema: Negro, Grafito, Acento suave. Tamaño: S / M.
-- La muesca en reposo siempre se atenúa (modo discreto fijo, sin interruptor).
+- Tema, en el menú de estado → Tema: Negro, Grafito, Acento suave. Debajo, Invisible.
+- Tamaño: S / M. S es el valor de una instalación nueva.
+- La muesca en reposo siempre se atenúa (modo discreto fijo).
 
 Posición y fijar
 ----------------
 - Centro superior / inferior / medio izquierda / derecha, y arrastre.
-- Fijar expandida: menú de estado, Preferencias, o clic derecho → Desfijar en la tira expandida.
-- Pantalla: el menú y Preferencias solo muestran Pantalla si hay más de un monitor.
+- Fijar expandida: menú de estado, o clic derecho → Desfijar en la tira expandida.
+- Pantalla: el menú solo muestra Pantalla si hay más de un monitor.
 
-Preferencias y menú
--------------------
-Icono de la barra de menú → Preferencias… abre una ventana de verdad
-(tema, tamaño, opacidad en reposo, fijar, posición, abrir al iniciar sesión,
-reiniciar foco). Iniciar foco, Pausar foco, Reiniciar foco y Modo cine están en el menú. Copiar diagnósticos sigue en el menú y en esa ventana.
+Menú
+----
+Icono de la barra de menú: Mostrar/Ocultar, Posición, Fijar expandida, Tema (con Invisible), Tamaño, Iniciar/Pausar/Reanudar foco, Reiniciar foco, Abrir al iniciar sesión (desactivado hasta que lo actives), Copiar diagnósticos, Salir.
 
-En un solo monitor no aparece el ítem Pantalla.
+No hay Preferencias.
 
 Salir
 -----
@@ -87,10 +82,13 @@ Icono de la barra de menú → Salir de TouchBarPill (⌘Q en ese menú).
 
 Prueba rápida
 -------------
-1. Medio derecha: pestaña pegada al borde, sin contorno claro por dentro.
-2. Scroll encima (o dos dedos, u Opción+scroll): el % sale grande ~0,8 s. Doble clic: 🔇. Otro doble clic: el % otra vez.
-3. Clic, o menú Iniciar foco: la etiqueta pasa a 0:01 y sigue. Pausar foco la deja en pausa. Reiniciar foco vuelve a Touch Bar.
-4. YouTube a pantalla completa: la muesca desaparece. Diagnóstico: cinema-window. El puntero en el borde la trae; al salir se oculta. Si no desaparece, menú → Modo cine (forzar ocultar) y el diagnóstico dice manual.
+1. En reposo: reloj | Touch Bar | altavoz. El centro es más ancho.
+2. Pasa el puntero por el reloj o por el altavoz: la Touch Bar no se abre.
+3. Pasa el puntero por «Touch Bar»: tras un instante se abre la tira.
+4. Clic en el reloj: el centro dice 0m. El ala izquierda muestra pausa y parar. Al minuto pasa a 1m, no antes.
+5. Pausa: los minutos se quedan. Reanudar sigue. Parar vuelve a «Touch Bar» y al reloj.
+6. Hover en el altavoz: sale la barra de volumen sin abrir la Touch Bar. La rueda cambia el %. Clic: 🔇.
+7. YouTube a pantalla completa: la muesca desaparece. Tema → Invisible la oculta aunque no haya vídeo. El diagnóstico dice invisible.
 
 Nota
 ----
