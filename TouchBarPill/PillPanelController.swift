@@ -2,12 +2,13 @@ import AppKit
 import QuartzCore
 
 enum PillMetrics {
-    /// Collapsed notch tab. Width stays 132. Height is 80% of the previous
-    /// 40-pt notch so the tab sits shorter on the screen edge. Ear and bottom
-    /// radii scale with that height so the silhouette stays the same.
+    /// Medium (default) collapsed notch. S scales via `PillPlacement.size`.
     static let collapsedSize = NSSize(width: 132, height: 32)
     static let notchEarRadius: CGFloat = 11
     static let notchBottomRadius: CGFloat = 10
+
+    static var scaledEarRadius: CGFloat { notchEarRadius * PillPlacement.size.scale }
+    static var scaledBottomRadius: CGFloat { notchBottomRadius * PillPlacement.size.scale }
 
     /// Expanded strip: 15% larger than the previous 0.75 scale (0.75 × 1.15).
     static let expandedScale: CGFloat = 0.75 * 1.15
@@ -78,6 +79,8 @@ final class PillPanelController: NSObject {
     private var expandItem: DispatchWorkItem?
     private var discreetItem: DispatchWorkItem?
     private var fullscreenHideItem: DispatchWorkItem?
+    private var pendingFocusClick: DispatchWorkItem?
+    private var volumeFlashItem: DispatchWorkItem?
     private var chromeGeneration = 0
     /// Fullscreen: notch is near-invisible but still hittable until hover.
     private var fullscreenConcealed = false
@@ -97,16 +100,14 @@ final class PillPanelController: NSObject {
         configurePanel()
         panel.shapeContains = { [weak root] point in
             guard let root else { return false }
-            return PillShape.path(
-                in: root.bounds,
-                expanded: root.showsExpandedShape,
-                edge: PillPlacement.edge
-            ).contains(point)
+            return root.hitShapeContains(point)
         }
         root.onEntered = { [weak self] in self?.pointerEntered() }
         root.onExited = { [weak self] in self?.pointerExited() }
         root.onPress = { [weak self] in self?.pressBegan() }
-        root.onClick = { [weak self] in self?.clickCollapsed() }
+        root.onClick = { [weak self] in self?.scheduleFocusClick() }
+        root.onDoubleClick = { [weak self] in self?.doubleClickCollapsed() }
+        root.onScroll = { [weak self] event in self?.scrollCollapsed(event) }
         root.onDrag = { [weak self] origin in self?.dragCollapsed(to: origin) }
         root.onDragEnd = { [weak self] in self?.finishDrag() }
         root.onRetry = { [weak self] in self?.retry() }
@@ -252,7 +253,7 @@ final class PillPanelController: NSObject {
     }
 
     /// Hover-expand delay. Long enough to begin a drag, short enough that
-    /// resting the pointer still feels immediate.
+    /// resting the pointer still feels immediate. Default ~0.09s (snappier).
     private func scheduleExpand() {
         expandItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -260,12 +261,26 @@ final class PillPanelController: NSObject {
             self.setExpanded(true)
         }
         expandItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + PillPlacement.revealDelay, execute: work)
     }
 
     private func pressBegan() {
         expandItem?.cancel()
         expandItem = nil
+        pendingFocusClick?.cancel()
+        pendingFocusClick = nil
+    }
+
+    /// Debounce single-click focus so a double-click can steal it for mute.
+    private func scheduleFocusClick() {
+        pendingFocusClick?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingFocusClick = nil
+            self.clickCollapsed()
+        }
+        pendingFocusClick = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: work)
     }
 
     /// Click on the collapsed notch toggles the focus timer. It does not expand.
@@ -286,11 +301,64 @@ final class PillPanelController: NSObject {
         FocusSession.shared.toggleFromClick()
         root.refreshFocusChrome()
         // Stay collapsed; hover continues to own expand.
-        if hovering {
-            refreshChromeOpacity(animated: true)
+        refreshChromeOpacity(animated: true)
+    }
+
+    /// Double-click collapsed notch: toggle system mute (does not expand).
+    private func doubleClickCollapsed() {
+        guard !expanded else { return }
+        pendingFocusClick?.cancel()
+        pendingFocusClick = nil
+        expandItem?.cancel()
+        expandItem = nil
+        if fullscreenConcealed {
+            setFullscreenConcealed(false, animated: true)
+        }
+        setOpacity(1, animated: false)
+        let muted = SystemVolume.toggleMute()
+        flashVolume(muted ? "🔇" : volumePercentLabel())
+        refreshChromeOpacity(animated: true)
+    }
+
+    /// Scroll over collapsed notch (or fullscreen hit pad): system volume.
+    private func scrollCollapsed(_ event: NSEvent) {
+        guard !expanded else { return }
+        var dy = event.scrollingDeltaY
+        if event.isDirectionInvertedFromDevice { dy = -dy }
+        guard abs(dy) > 0.01 else { return }
+        // Positive dy = scroll up = volume up.
+        let steps: Float
+        if event.hasPreciseScrollingDeltas {
+            steps = Float(dy) / 24.0
         } else {
+            steps = dy > 0 ? 1 : -1
+        }
+        guard abs(steps) > 0.02 else { return }
+        if let volume = SystemVolume.adjust(by: steps * SystemVolume.step) {
+            if fullscreenConcealed {
+                setFullscreenConcealed(false, animated: true)
+            }
+            setOpacity(1, animated: false)
+            flashVolume(volumePercentLabel(volume))
             refreshChromeOpacity(animated: true)
         }
+    }
+
+    private func volumePercentLabel(_ volume: Float? = nil) -> String {
+        let v = volume ?? SystemVolume.volume() ?? 0
+        return "\(Int((v * 100).rounded()))%"
+    }
+
+    private func flashVolume(_ text: String) {
+        volumeFlashItem?.cancel()
+        root.setVolumeFlash(text)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.volumeFlashItem = nil
+            self.root.setVolumeFlash(nil)
+        }
+        volumeFlashItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: work)
     }
 
     private func pointerExited() {
@@ -427,7 +495,7 @@ final class PillPanelController: NSObject {
             self.setFullscreenConcealed(true, animated: true)
         }
         fullscreenHideItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + PillPlacement.fullscreenHideDelay, execute: work)
     }
 
     private func setFullscreenConcealed(_ conceal: Bool, animated: Bool) {
@@ -662,6 +730,8 @@ final class PillRootView: NSView {
     var onExited: (() -> Void)?
     var onPress: (() -> Void)?
     var onClick: (() -> Void)?
+    var onDoubleClick: (() -> Void)?
+    var onScroll: ((NSEvent) -> Void)?
     var onDrag: ((NSPoint) -> Void)?
     var onDragEnd: (() -> Void)?
     var onRetry: (() -> Void)?
@@ -675,7 +745,6 @@ final class PillRootView: NSView {
     private let pinButton = PinButton(frame: .zero)
     private var tracking: NSTrackingArea?
     private(set) var showsExpandedShape = false
-
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -705,6 +774,26 @@ final class PillRootView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    /// Hit path includes the fullscreen pad; visual chrome stays flush to the edge.
+    func hitShapeContains(_ point: NSPoint) -> Bool {
+        if showsExpandedShape {
+            return PillShape.path(in: bounds, expanded: true, edge: PillPlacement.edge).contains(point)
+        }
+        let visual = DisplayList.visualCollapsedRect(in: bounds)
+        let path = PillShape.path(in: visual, expanded: false, edge: PillPlacement.edge)
+        if path.contains(point) { return true }
+        // Fullscreen pad: transparent strip between visual notch and inward edge.
+        if FullscreenWatcher.shared.isFullscreen, bounds.contains(point) {
+            return true
+        }
+        return false
+    }
+
+    func setVolumeFlash(_ text: String?) {
+        chrome.volumeFlash = text
+        chrome.refreshLabel()
+    }
+
     func apply(mirror: DFRMirror, expanded: Bool) {
         showsExpandedShape = expanded
         chrome.edge = PillPlacement.edge
@@ -732,13 +821,18 @@ final class PillRootView: NSView {
 
     func refreshFocusChrome() {
         chrome.refreshLabel()
+        needsDisplay = true
     }
 
     override func layout() {
         super.layout()
         updateChrome()
         streamView.frame = bounds.insetBy(dx: PillMetrics.streamPadX, dy: PillMetrics.streamPadY)
-        chrome.frame = bounds
+        if showsExpandedShape {
+            chrome.frame = bounds
+        } else {
+            chrome.frame = DisplayList.visualCollapsedRect(in: bounds)
+        }
         fallback.frame = bounds.insetBy(dx: PillMetrics.fallbackInset.width, dy: PillMetrics.fallbackInset.height)
         fallback.layoutSubtreeIfNeeded()
         let pin = PillMetrics.pinButtonSize
@@ -767,15 +861,20 @@ final class PillRootView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
-        guard PillShape.path(in: bounds, expanded: showsExpandedShape, edge: PillPlacement.edge).contains(local) else {
-            return nil
-        }
+        guard hitShapeContains(local) else { return nil }
         return super.hitTest(point)
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let path = PillShape.path(in: bounds, expanded: showsExpandedShape, edge: PillPlacement.edge)
-        NSColor(calibratedWhite: 0.04, alpha: 0.97).setFill()
+        if showsExpandedShape {
+            let path = PillShape.path(in: bounds, expanded: true, edge: PillPlacement.edge)
+            NSColor(calibratedWhite: 0.04, alpha: 0.97).setFill()
+            path.fill()
+            return
+        }
+        let visual = DisplayList.visualCollapsedRect(in: bounds)
+        let path = PillShape.path(in: visual, expanded: false, edge: PillPlacement.edge)
+        PillPlacement.theme.fillColor.setFill()
         path.fill()
     }
 
@@ -787,18 +886,26 @@ final class PillRootView: NSView {
         onExited?()
     }
 
+    override func scrollWheel(with event: NSEvent) {
+        guard !showsExpandedShape else {
+            super.scrollWheel(with: event)
+            return
+        }
+        onScroll?(event)
+    }
+
     override func mouseDown(with event: NSEvent) {
         if event.modifierFlags.contains(.control) {
             presentContextMenu(with: event)
             return
         }
         guard !showsExpandedShape else { return }
-        trackClickOrDrag()
+        trackClickOrDrag(clickCount: max(1, event.clickCount))
     }
 
-    /// A small click toggles focus. A drag along the attached edge parks the
-    /// notch. Hover (not click) expands the Touch Bar after a short delay.
-    private func trackClickOrDrag() {
+    /// A small click toggles focus. A double-click toggles mute. A drag along
+    /// the attached edge parks the notch. Hover (not click) expands the Touch Bar.
+    private func trackClickOrDrag(clickCount: Int) {
         guard let window else {
             onEntered?()
             return
@@ -808,13 +915,17 @@ final class PillRootView: NSView {
         let startOrigin = window.frame.origin
         let edge = PillPlacement.edge
         var moved = false
+        var upClickCount = clickCount
         while let next = window.nextEvent(
             matching: [.leftMouseDragged, .leftMouseUp],
             until: .distantFuture,
             inMode: .eventTracking,
             dequeue: true
         ) {
-            if next.type == .leftMouseUp { break }
+            if next.type == .leftMouseUp {
+                upClickCount = max(upClickCount, next.clickCount)
+                break
+            }
             let mouse = NSEvent.mouseLocation
             let dx = mouse.x - startMouse.x
             let dy = mouse.y - startMouse.y
@@ -837,6 +948,8 @@ final class PillRootView: NSView {
         }
         if moved {
             onDragEnd?()
+        } else if upClickCount >= 2 {
+            onDoubleClick?()
         } else {
             onClick?()
         }
@@ -916,8 +1029,8 @@ enum PillShape {
 
     /// Ears at the top edge; rounded free edge at the bottom.
     private static func topNotch(in rect: NSRect) -> NSBezierPath {
-        let ear = min(PillMetrics.notchEarRadius, max(4, rect.height * 0.45), max(4, rect.width / 4))
-        let bottom = min(PillMetrics.notchBottomRadius, max(4, rect.height - ear - 2), max(4, rect.width / 2 - ear - 1))
+        let ear = min(PillMetrics.scaledEarRadius, max(4, rect.height * 0.45), max(4, rect.width / 4))
+        let bottom = min(PillMetrics.scaledBottomRadius, max(4, rect.height - ear - 2), max(4, rect.width / 2 - ear - 1))
         let path = NSBezierPath()
         path.move(to: NSPoint(x: rect.minX, y: rect.maxY))
         path.line(to: NSPoint(x: rect.maxX, y: rect.maxY))
@@ -958,8 +1071,8 @@ enum PillShape {
 
     /// Flipped: ears meet the bottom edge.
     private static func bottomNotch(in rect: NSRect) -> NSBezierPath {
-        let ear = min(PillMetrics.notchEarRadius, max(4, rect.height * 0.45), max(4, rect.width / 4))
-        let tip = min(PillMetrics.notchBottomRadius, max(4, rect.height - ear - 2), max(4, rect.width / 2 - ear - 1))
+        let ear = min(PillMetrics.scaledEarRadius, max(4, rect.height * 0.45), max(4, rect.width / 4))
+        let tip = min(PillMetrics.scaledBottomRadius, max(4, rect.height - ear - 2), max(4, rect.width / 2 - ear - 1))
         let path = NSBezierPath()
         path.move(to: NSPoint(x: rect.minX, y: rect.minY))
         path.line(to: NSPoint(x: rect.maxX, y: rect.minY))
@@ -1000,8 +1113,8 @@ enum PillShape {
 
     /// Ears meet the left bezel; rounded free edge on the right.
     private static func leftNotch(in rect: NSRect) -> NSBezierPath {
-        let ear = min(PillMetrics.notchEarRadius, max(4, rect.width * 0.45), max(4, rect.height / 4))
-        let tip = min(PillMetrics.notchBottomRadius, max(4, rect.width - ear - 2), max(4, rect.height / 2 - ear - 1))
+        let ear = min(PillMetrics.scaledEarRadius, max(4, rect.width * 0.45), max(4, rect.height / 4))
+        let tip = min(PillMetrics.scaledBottomRadius, max(4, rect.width - ear - 2), max(4, rect.height / 2 - ear - 1))
         let path = NSBezierPath()
         path.move(to: NSPoint(x: rect.minX, y: rect.maxY))
         path.line(to: NSPoint(x: rect.minX, y: rect.minY))
@@ -1042,8 +1155,8 @@ enum PillShape {
 
     /// Ears meet the right bezel; rounded free edge on the left.
     private static func rightNotch(in rect: NSRect) -> NSBezierPath {
-        let ear = min(PillMetrics.notchEarRadius, max(4, rect.width * 0.45), max(4, rect.height / 4))
-        let tip = min(PillMetrics.notchBottomRadius, max(4, rect.width - ear - 2), max(4, rect.height / 2 - ear - 1))
+        let ear = min(PillMetrics.scaledEarRadius, max(4, rect.width * 0.45), max(4, rect.height / 4))
+        let tip = min(PillMetrics.scaledBottomRadius, max(4, rect.width - ear - 2), max(4, rect.height / 2 - ear - 1))
         let path = NSBezierPath()
         path.move(to: NSPoint(x: rect.maxX, y: rect.maxY))
         path.line(to: NSPoint(x: rect.maxX, y: rect.minY))
@@ -1084,9 +1197,11 @@ enum PillShape {
 }
 
 /// Centered collapsed label. Idle shows “Touch Bar”; focus shows the timer.
-/// SF Pro Rounded, medium/semibold, tight tracking, tuned for the 32-pt notch.
+/// All phases share the idle SF Pro Rounded premium styling (weight, tracking,
+/// optical centering), scaled with notch size. Optional volume % flash.
 final class CollapsedChromeView: NSView {
     var edge: PillEdge = .topCenter
+    var volumeFlash: String?
 
     override var isOpaque: Bool { false }
 
@@ -1097,7 +1212,7 @@ final class CollapsedChromeView: NSView {
     override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
 
     override func accessibilityLabel() -> String? {
-        isHidden ? nil : FocusSession.shared.notchLabel
+        isHidden ? nil : (volumeFlash ?? FocusSession.shared.notchLabel)
     }
 
     func refreshLabel() {
@@ -1106,12 +1221,13 @@ final class CollapsedChromeView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let session = FocusSession.shared
-        let title = session.notchLabel as NSString
-        let font = Self.labelFont(for: session.phase)
+        let title = (volumeFlash ?? session.notchLabel) as NSString
+        let font = Self.labelFont()
+        let alpha = volumeFlash != nil ? CGFloat(0.95) : session.labelAlpha
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: NSColor.white.withAlphaComponent(session.labelAlpha),
-            .kern: Self.tracking(for: session.phase),
+            .foregroundColor: NSColor.white.withAlphaComponent(alpha),
+            .kern: Self.tracking,
         ]
         let textSize = title.size(withAttributes: attributes)
 
@@ -1140,35 +1256,17 @@ final class CollapsedChromeView: NSView {
         }
     }
 
-    private static func labelFont(for phase: FocusPhase) -> NSFont {
-        let size: CGFloat
-        let weight: NSFont.Weight
-        switch phase {
-        case .idle:
-            // ~32-pt notch: 11.5 pt reads premium without crowding the ears.
-            size = 11.5
-            weight = .medium
-        case .running, .paused:
-            size = 12.5
-            weight = .semibold
-        case .done:
-            size = 11.5
-            weight = .semibold
-        }
-        let base = NSFont.systemFont(ofSize: size, weight: weight)
+    /// Same premium idle face for timer / paused / Done / volume flash.
+    private static func labelFont() -> NSFont {
+        let size = 11.5 * PillPlacement.size.scale
+        let base = NSFont.systemFont(ofSize: size, weight: .medium)
         if let rounded = base.fontDescriptor.withDesign(.rounded) {
             return NSFont(descriptor: rounded, size: size) ?? base
         }
         return base
     }
 
-    private static func tracking(for phase: FocusPhase) -> CGFloat {
-        switch phase {
-        case .idle: return -0.35
-        case .running, .paused: return -0.2
-        case .done: return -0.25
-        }
-    }
+    private static let tracking: CGFloat = -0.35
 }
 
 /// Soft pushpin shown only while the expanded strip is pinned and hovered.

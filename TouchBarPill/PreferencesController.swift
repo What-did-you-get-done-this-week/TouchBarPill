@@ -1,7 +1,7 @@
 import AppKit
 
 /// Preferences for the stream, collapse delay, login item, display, position,
-/// pin, discreet mode, and focus goal. The collapse delay itself is still a defaults key.
+/// pin, discreet mode, focus goal, notch chrome, and fullscreen hit zone.
 final class PreferencesController: NSWindowController {
     private let statusTitle = NSTextField(labelWithString: L("Stream"))
     private let statusBody = NSTextField(wrappingLabelWithString: L("Starting…"))
@@ -18,12 +18,15 @@ final class PreferencesController: NSWindowController {
     private let opacityReadout = NSTextField(labelWithString: "")
     private let focusGoalPopup = NSPopUpButton()
     private let resetFocusButton = NSButton(title: L("Reset Focus"), target: nil, action: nil)
+    private let themePopup = NSPopUpButton()
+    private let sizePopup = NSPopUpButton()
+    private let hitZonePopup = NSPopUpButton()
     private var mirror: DFRMirror?
     private var suppressUI = false
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 640),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 720),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -127,7 +130,7 @@ final class PreferencesController: NSWindowController {
         let heading = NSTextField(labelWithString: "TouchBarPill")
         heading.font = .systemFont(ofSize: 18, weight: .semibold)
 
-        let intro = note(L("A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. Click the collapsed notch to start or pause Focus. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned."))
+        let intro = note(L("A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. Click the collapsed notch to start or pause Focus. Scroll to change volume; double-click to mute. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned."))
         intro.font = .systemFont(ofSize: 12)
         intro.textColor = .secondaryLabelColor
 
@@ -191,6 +194,24 @@ final class PreferencesController: NSWindowController {
         resetFocusButton.action = #selector(resetFocus(_:))
         let focusNote = note(L("Click the collapsed notch to start or pause a focus timer. Goal Off means no done state. 25 or 50 minutes show Done gently on the notch. Default goal is Off."))
 
+        let themeLabel = sectionLabel(L("Notch theme"))
+        themePopup.target = self
+        themePopup.action = #selector(themeChanged(_:))
+        themePopup.setAccessibilityLabel(L("Notch theme"))
+        let themeNote = note(L("Collapsed notch chrome only. Black, Graphite, or Soft accent (deep blue). The Touch Bar stream is unchanged."))
+
+        let sizeLabel = sectionLabel(L("Notch size"))
+        sizePopup.target = self
+        sizePopup.action = #selector(sizeChanged(_:))
+        sizePopup.setAccessibilityLabel(L("Notch size"))
+        let sizeNote = note(L("S is smaller; M matches the previous size. Label and silhouette scale together."))
+
+        let hitZoneLabel = sectionLabel(L("Hit zone"))
+        hitZonePopup.target = self
+        hitZonePopup.action = #selector(hitZoneChanged(_:))
+        hitZonePopup.setAccessibilityLabel(L("Hit zone"))
+        let hitZoneNote = note(L("Fullscreen edge target width. Narrow / Normal / Wide. Normal is a bit wider than the visual tab so the near-invisible hit area is easier to find."))
+
         let opacityLabel = sectionLabel(L("Idle opacity"))
         opacitySlider.minValue = 0.35
         opacitySlider.maxValue = 0.75
@@ -217,6 +238,9 @@ final class PreferencesController: NSWindowController {
             labeledRow(discreetLabel, discreetSwitch),
             labeledRow(opacityLabel, opacityCluster()),
             labeledRow(focusLabel, focusGoalPopup),
+            labeledRow(themeLabel, themePopup),
+            labeledRow(sizeLabel, sizePopup),
+            labeledRow(hitZoneLabel, hitZonePopup),
         ]
         stack.addArrangedSubview(heading)
         stack.addArrangedSubview(intro)
@@ -239,12 +263,18 @@ final class PreferencesController: NSWindowController {
         stack.addArrangedSubview(rows[7])
         stack.addArrangedSubview(focusNote)
         stack.addArrangedSubview(resetFocusButton)
+        stack.addArrangedSubview(rows[8])
+        stack.addArrangedSubview(themeNote)
+        stack.addArrangedSubview(rows[9])
+        stack.addArrangedSubview(sizeNote)
+        stack.addArrangedSubview(rows[10])
+        stack.addArrangedSubview(hitZoneNote)
         stack.addArrangedSubview(copy)
         for row in rows {
             row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
 
-        for view in [intro, statusBody, delayNote, loginNote, displayNote, positionNote, pinNote, discreetNote, focusNote] {
+        for view in [intro, statusBody, delayNote, loginNote, displayNote, positionNote, pinNote, discreetNote, focusNote, themeNote, sizeNote, hitZoneNote] {
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
         reloadPlacementControls()
@@ -345,6 +375,28 @@ final class PreferencesController: NSWindowController {
         opacitySlider.isEnabled = PillPlacement.discreetMode
         opacitySlider.doubleValue = Double(PillPlacement.discreetOpacity)
         opacityReadout.stringValue = "\(Int((PillPlacement.discreetOpacity * 100).rounded()))%"
+
+        themePopup.removeAllItems()
+        for (index, theme) in NotchTheme.allCases.enumerated() {
+            themePopup.addItem(withTitle: theme.menuTitle)
+            themePopup.lastItem?.tag = index
+        }
+        themePopup.selectItem(withTag: NotchTheme.allCases.firstIndex(of: PillPlacement.theme) ?? 0)
+
+        sizePopup.removeAllItems()
+        for (index, size) in NotchSize.allCases.enumerated() {
+            sizePopup.addItem(withTitle: size.menuTitle)
+            sizePopup.lastItem?.tag = index
+        }
+        sizePopup.selectItem(withTag: NotchSize.allCases.firstIndex(of: PillPlacement.size) ?? 1)
+
+        hitZonePopup.removeAllItems()
+        for (index, zone) in HitZoneWidth.allCases.enumerated() {
+            hitZonePopup.addItem(withTitle: zone.menuTitle)
+            hitZonePopup.lastItem?.tag = index
+        }
+        hitZonePopup.selectItem(withTag: HitZoneWidth.allCases.firstIndex(of: PillPlacement.hitZone) ?? 1)
+
         reloadFocusControls()
     }
 
@@ -420,6 +472,27 @@ final class PreferencesController: NSWindowController {
 
     @objc private func resetFocus(_ sender: NSButton) {
         FocusSession.shared.reset()
+    }
+
+    @objc private func themeChanged(_ sender: NSPopUpButton) {
+        guard !suppressUI, let item = sender.selectedItem,
+              NotchTheme.allCases.indices.contains(item.tag) else { return }
+        PillPlacement.theme = NotchTheme.allCases[item.tag]
+        PillPlacement.postChange()
+    }
+
+    @objc private func sizeChanged(_ sender: NSPopUpButton) {
+        guard !suppressUI, let item = sender.selectedItem,
+              NotchSize.allCases.indices.contains(item.tag) else { return }
+        PillPlacement.size = NotchSize.allCases[item.tag]
+        PillPlacement.postChange()
+    }
+
+    @objc private func hitZoneChanged(_ sender: NSPopUpButton) {
+        guard !suppressUI, let item = sender.selectedItem,
+              HitZoneWidth.allCases.indices.contains(item.tag) else { return }
+        PillPlacement.hitZone = HitZoneWidth.allCases[item.tag]
+        PillPlacement.postChange()
     }
 
     @objc private func copyDiagnostics() {

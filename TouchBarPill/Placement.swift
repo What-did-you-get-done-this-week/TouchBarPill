@@ -17,9 +17,82 @@ enum PillEdge: String, CaseIterable {
     var isVerticalEdge: Bool { attachesLeft || attachesRight }
 }
 
-/// Persisted placement, pin, and discreet-mode settings.
+/// Collapsed-notch chrome theme. Applies to the tab only, not the DFR stream.
+enum NotchTheme: String, CaseIterable {
+    case black
+    case graphite
+    case softAccent
+
+    var menuTitle: String {
+        switch self {
+        case .black: return L("Black")
+        case .graphite: return L("Graphite")
+        case .softAccent: return L("Soft accent")
+        }
+    }
+
+    /// Fill for the collapsed notch silhouette.
+    var fillColor: NSColor {
+        switch self {
+        case .black:
+            return NSColor(calibratedWhite: 0.04, alpha: 0.97)
+        case .graphite:
+            return NSColor(calibratedWhite: 0.16, alpha: 0.97)
+        case .softAccent:
+            // Deep blue — tasteful tint, still dark enough for white labels.
+            return NSColor(calibratedRed: 0.10, green: 0.14, blue: 0.24, alpha: 0.97)
+        }
+    }
+}
+
+/// Collapsed notch size. M matches 0.4.0 (132×32). S scales ~85%.
+enum NotchSize: String, CaseIterable {
+    case small
+    case medium
+
+    var menuTitle: String {
+        switch self {
+        case .small: return L("S")
+        case .medium: return L("M")
+        }
+    }
+
+    /// Uniform scale vs the medium (current) notch.
+    var scale: CGFloat {
+        switch self {
+        case .small: return 0.85
+        case .medium: return 1.0
+        }
+    }
+}
+
+/// Fullscreen edge hit-zone thickness. Normal is the 0.4.1 default (a bit wider).
+enum HitZoneWidth: String, CaseIterable {
+    case narrow
+    case normal
+    case wide
+
+    var menuTitle: String {
+        switch self {
+        case .narrow: return L("Narrow")
+        case .normal: return L("Normal")
+        case .wide: return L("Wide")
+        }
+    }
+
+    /// Extra points inward from the bezel beyond the visual notch, when fullscreen.
+    var pad: CGFloat {
+        switch self {
+        case .narrow: return 2
+        case .normal: return 8
+        case .wide: return 16
+        }
+    }
+}
+
+/// Persisted placement, pin, discreet-mode, and notch-chrome settings.
 /// Launch never writes these. Missing keys mean: top center, not pinned,
-/// discreet mode on at 52% opacity.
+/// discreet mode on at 52% opacity, black theme, medium size, normal hit zone.
 enum PillPlacement {
     static let didChange = Notification.Name("PillPlacementDidChange")
 
@@ -32,6 +105,11 @@ enum PillPlacement {
     static let discreetKey = "DiscreetMode"
     static let opacityKey = "DiscreetOpacity"
     static let idleDelayKey = "DiscreetIdleDelay"
+    static let themeKey = "NotchTheme"
+    static let sizeKey = "NotchSize"
+    static let hitZoneKey = "HitZoneWidth"
+    static let revealDelayKey = "RevealDelay"
+    static let fullscreenHideDelayKey = "FullscreenHideDelay"
 
     static let defaultOpacity = 0.52
 
@@ -125,6 +203,58 @@ enum PillPlacement {
         return min(max(raw, 0.3), 8)
     }
 
+    /// Collapsed chrome theme. Default black.
+    static var theme: NotchTheme {
+        get {
+            if let raw = UserDefaults.standard.string(forKey: themeKey),
+               let theme = NotchTheme(rawValue: raw) {
+                return theme
+            }
+            return .black
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: themeKey) }
+    }
+
+    /// Collapsed notch size. Default medium (0.4.0 footprint).
+    static var size: NotchSize {
+        get {
+            if let raw = UserDefaults.standard.string(forKey: sizeKey),
+               let size = NotchSize(rawValue: raw) {
+                return size
+            }
+            return .medium
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: sizeKey) }
+    }
+
+    /// Fullscreen edge hit zone. Default normal (slightly wider than the visual tab).
+    static var hitZone: HitZoneWidth {
+        get {
+            if let raw = UserDefaults.standard.string(forKey: hitZoneKey),
+               let zone = HitZoneWidth(rawValue: raw) {
+                return zone
+            }
+            return .normal
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: hitZoneKey) }
+    }
+
+    /// Hover-expand delay. Snappier than 0.4.0’s 0.14s.
+    /// `defaults write com.touchbarpill.TouchBarPill RevealDelay -float 0.08`
+    static var revealDelay: TimeInterval {
+        let raw = UserDefaults.standard.double(forKey: revealDelayKey)
+        guard raw > 0 else { return 0.09 }
+        return min(max(raw, 0.04), 1)
+    }
+
+    /// Fullscreen re-conceal delay after the pointer leaves.
+    /// `defaults write com.touchbarpill.TouchBarPill FullscreenHideDelay -float 0.9`
+    static var fullscreenHideDelay: TimeInterval {
+        let raw = UserDefaults.standard.double(forKey: fullscreenHideDelayKey)
+        guard raw > 0 else { return 0.85 }
+        return min(max(raw, 0.3), 3)
+    }
+
     static func storeEdge(_ edge: PillEdge) {
         self.edge = edge
         offset = 0
@@ -194,13 +324,48 @@ enum DisplayList {
         return min(max(y, minY), maxY)
     }
 
-    /// Collapsed notch size. Side edges swap width/height so the ears meet the bezel.
-    static func collapsedSize(for edge: PillEdge = PillPlacement.edge) -> NSSize {
-        let base = PillMetrics.collapsedSize
+    /// Visual collapsed notch size (theme/size prefs). Side edges swap axes.
+    static func visualCollapsedSize(for edge: PillEdge = PillPlacement.edge) -> NSSize {
+        let scale = PillPlacement.size.scale
+        let base = NSSize(
+            width: PillMetrics.collapsedSize.width * scale,
+            height: PillMetrics.collapsedSize.height * scale
+        )
         if edge.isVerticalEdge {
             return NSSize(width: base.height, height: base.width)
         }
         return base
+    }
+
+    /// Panel size including fullscreen hit-zone pad when immersive.
+    static func collapsedSize(
+        for edge: PillEdge = PillPlacement.edge,
+        immersive: Bool = FullscreenWatcher.shared.isFullscreen
+    ) -> NSSize {
+        let visual = visualCollapsedSize(for: edge)
+        guard immersive else { return visual }
+        let pad = PillPlacement.hitZone.pad
+        switch edge {
+        case .topCenter, .bottomCenter:
+            return NSSize(width: visual.width, height: visual.height + pad)
+        case .leftMid, .rightMid:
+            return NSSize(width: visual.width + pad, height: visual.height)
+        }
+    }
+
+    /// Rect of the drawn notch inside a (possibly padded) panel, flush to the bezel.
+    static func visualCollapsedRect(in bounds: NSRect, edge: PillEdge = PillPlacement.edge) -> NSRect {
+        let visual = visualCollapsedSize(for: edge)
+        switch edge {
+        case .topCenter:
+            return NSRect(x: bounds.minX, y: bounds.maxY - visual.height, width: visual.width, height: visual.height)
+        case .bottomCenter:
+            return NSRect(x: bounds.minX, y: bounds.minY, width: visual.width, height: visual.height)
+        case .leftMid:
+            return NSRect(x: bounds.minX, y: bounds.minY, width: visual.width, height: visual.height)
+        case .rightMid:
+            return NSRect(x: bounds.maxX - visual.width, y: bounds.minY, width: visual.width, height: visual.height)
+        }
     }
 
     static func collapsedOrigin(size: NSSize, on screen: NSScreen) -> NSPoint {

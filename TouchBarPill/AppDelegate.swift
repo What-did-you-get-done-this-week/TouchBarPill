@@ -9,6 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let displayMenu = NSMenu()
     private let positionMenu = NSMenu()
     private let focusGoalMenu = NSMenu()
+    private let themeMenu = NSMenu()
+    private let sizeMenu = NSMenu()
+    private let hitZoneMenu = NSMenu()
     private var resetFocusItem: NSMenuItem!
     private var didTeardown = false
     private var mirror: DFRMirror!
@@ -55,6 +58,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         rebuildDisplayMenu()
         rebuildPositionMenu()
         rebuildFocusGoalMenu()
+        rebuildThemeMenu()
+        rebuildSizeMenu()
+        rebuildHitZoneMenu()
     }
 
     private func buildStatusItem() {
@@ -88,6 +94,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         discreetItem = NSMenuItem(title: L("Discreet mode"), action: #selector(toggleDiscreet), keyEquivalent: "")
         discreetItem.target = self
         menu.addItem(discreetItem)
+
+        let themeItem = NSMenuItem(title: L("Notch theme"), action: nil, keyEquivalent: "")
+        themeItem.submenu = themeMenu
+        menu.addItem(themeItem)
+
+        let sizeItem = NSMenuItem(title: L("Notch size"), action: nil, keyEquivalent: "")
+        sizeItem.submenu = sizeMenu
+        menu.addItem(sizeItem)
+
+        let hitZoneItem = NSMenuItem(title: L("Hit zone"), action: nil, keyEquivalent: "")
+        hitZoneItem.submenu = hitZoneMenu
+        menu.addItem(hitZoneItem)
 
         menu.addItem(.separator())
 
@@ -181,6 +199,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         FocusSession.shared.goal = goal
     }
 
+    @objc private func chooseTheme(_ sender: NSMenuItem) {
+        guard NotchTheme.allCases.indices.contains(sender.tag) else { return }
+        PillPlacement.theme = NotchTheme.allCases[sender.tag]
+        PillPlacement.postChange()
+    }
+
+    @objc private func chooseSize(_ sender: NSMenuItem) {
+        guard NotchSize.allCases.indices.contains(sender.tag) else { return }
+        PillPlacement.size = NotchSize.allCases[sender.tag]
+        PillPlacement.postChange()
+    }
+
+    @objc private func chooseHitZone(_ sender: NSMenuItem) {
+        guard HitZoneWidth.allCases.indices.contains(sender.tag) else { return }
+        PillPlacement.hitZone = HitZoneWidth.allCases[sender.tag]
+        PillPlacement.postChange()
+    }
+
     @objc private func chooseDisplay(_ sender: NSMenuItem) {
         let ident = CGDirectDisplayID(sender.tag)
         guard ident != 0 else { return }
@@ -248,6 +284,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    private func rebuildThemeMenu() {
+        themeMenu.removeAllItems()
+        let current = PillPlacement.theme
+        for (index, theme) in NotchTheme.allCases.enumerated() {
+            let item = NSMenuItem(title: theme.menuTitle, action: #selector(chooseTheme(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            item.state = theme == current ? .on : .off
+            themeMenu.addItem(item)
+        }
+    }
+
+    private func rebuildSizeMenu() {
+        sizeMenu.removeAllItems()
+        let current = PillPlacement.size
+        for (index, size) in NotchSize.allCases.enumerated() {
+            let item = NSMenuItem(title: size.menuTitle, action: #selector(chooseSize(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            item.state = size == current ? .on : .off
+            sizeMenu.addItem(item)
+        }
+    }
+
+    private func rebuildHitZoneMenu() {
+        hitZoneMenu.removeAllItems()
+        let current = PillPlacement.hitZone
+        for (index, zone) in HitZoneWidth.allCases.enumerated() {
+            let item = NSMenuItem(title: zone.menuTitle, action: #selector(chooseHitZone(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            item.state = zone == current ? .on : .off
+            hitZoneMenu.addItem(item)
+        }
+    }
+
     @objc private func toggleLaunchAtLogin() {
         let outcome = LaunchAtLogin.setEnabled(!LaunchAtLogin.isOn)
         loginItem.state = LaunchAtLogin.isOn ? .on : .off
@@ -303,6 +375,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Edge: \(PillPlacement.edge.rawValue) offset \(String(format: "%.1f", Double(PillPlacement.offset)))
         PinExpanded: \(PillPlacement.pinExpanded)
         DiscreetMode: \(PillPlacement.discreetMode) opacity \(String(format: "%.2f", Double(PillPlacement.discreetOpacity))) idle \(String(format: "%.2f", PillPlacement.idleDelay))
+        NotchTheme: \(PillPlacement.theme.rawValue) size \(PillPlacement.size.rawValue) hitZone \(PillPlacement.hitZone.rawValue)
+        RevealDelay: \(String(format: "%.2f", PillPlacement.revealDelay)) FullscreenHideDelay: \(String(format: "%.2f", PillPlacement.fullscreenHideDelay))
         FocusGoal: \(FocusSession.shared.goal.rawValue)m phase \(String(describing: FocusSession.shared.phase)) elapsed \(String(format: "%.0f", FocusSession.shared.displayElapsed))s
         Fullscreen: \(FullscreenWatcher.shared.isFullscreen ? "yes" : "no")
         ExpandedPlacement: follows \(PillPlacement.edge.rawValue) on the chosen display

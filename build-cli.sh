@@ -35,9 +35,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.4.0</string>
+	<string>0.4.1</string>
 	<key>CFBundleVersion</key>
-	<string>7</string>
+	<string>8</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>12.0</string>
 	<key>LSMultipleInstancesProhibited</key>
@@ -64,10 +64,11 @@ swiftc -sdk "$SDK" -target arm64-apple-macos12.0 -O -whole-module-optimization \
   -import-objc-header "$SRC/TouchBarPill-Bridging-Header.h" -I"$SRC" \
   -framework AppKit -framework QuartzCore -framework CoreImage \
   -framework IOSurface -framework ImageIO -framework CoreGraphics \
-  -framework ServiceManagement -framework Foundation \
+  -framework ServiceManagement -framework Foundation -framework CoreAudio \
   "$SRC/main.swift" "$SRC/AppDelegate.swift" "$SRC/L10n.swift" \
   "$SRC/LaunchAtLogin.swift" "$SRC/Placement.swift" \
   "$SRC/FocusSession.swift" "$SRC/FullscreenWatcher.swift" \
+  "$SRC/SystemVolume.swift" \
   "$SRC/PillPanelController.swift" "$SRC/PreferencesController.swift" \
   "$SRC/TouchBarStreamView.swift" "$OBJ/DFRMirror.o" \
   -o "$MACOS/TouchBarPill"

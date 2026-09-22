@@ -70,6 +70,23 @@
 "When on, the strip stays open until you unpin it. Leave with the pointer and it stays. Unpin from this switch, the status menu, right-click → Unpin on the strip, or the soft pushpin that appears while hovering a pinned strip." = "Activado, la tira sigue abierta hasta que la desfijas. Salir con el puntero no la contrae. Desfíjala con este interruptor, el menú de estado, clic derecho → Desfijar en la tira, o el chincheta suave que aparece al pasar el puntero por una tira fijada.";
 "When the tab is collapsed and idle, it fades. Hover or expand brings it back to full opacity. On by default." = "Plegada y en reposo, la pestaña se atenúa. Al pasar el puntero o al expandir vuelve a opaca. Activado por omisión.";
 
+/* Aspecto de la muesca y pantalla completa */
+"Notch theme" = "Tema de la muesca";
+"Black" = "Negro";
+"Graphite" = "Grafito";
+"Soft accent" = "Acento suave";
+"Notch size" = "Tamaño de la muesca";
+"S" = "S";
+"M" = "M";
+"Hit zone" = "Zona de impacto";
+"Narrow" = "Estrecha";
+"Normal" = "Normal";
+"Wide" = "Ancha";
+"Collapsed notch chrome only. Black, Graphite, or Soft accent (deep blue). The Touch Bar stream is unchanged." = "Solo el cromado de la muesca plegada. Negro, Grafito o Acento suave (azul profundo). La señal de la Touch Bar no cambia.";
+"S is smaller; M matches the previous size. Label and silhouette scale together." = "S es más pequeña; M coincide con el tamaño anterior. Etiqueta y silueta escalan juntas.";
+"Fullscreen edge target width. Narrow / Normal / Wide. Normal is a bit wider than the visual tab so the near-invisible hit area is easier to find." = "Anchura del borde en pantalla completa. Estrecha / Normal / Ancha. Normal es un poco más ancha que la pestaña visible para que el área casi invisible sea más fácil de encontrar.";
+"A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. Click the collapsed notch to start or pause Focus. Scroll to change volume; double-click to mute. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned." = "Una muesca negra se pega al borde que elijas — centro superior por omisión, o inferior, medio izquierda o medio derecha. Arrástrala por ese borde. Pasa el puntero para abrir la Touch Bar. Clic en la muesca plegada para iniciar o pausar Foco. Desplaza para el volumen; doble clic para silenciar. La tira expandida sigue el mismo borde. Al salir se pliega, salvo que esté fijada.";
+
 /* Diagnósticos */
 "Screens:" = "Pantallas:";
 "notch" = "con muesca";

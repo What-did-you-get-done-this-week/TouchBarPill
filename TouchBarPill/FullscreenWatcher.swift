@@ -42,11 +42,12 @@ final class FullscreenWatcher {
 
     @objc private func reevaluate() {
         let options = NSApp.currentSystemPresentationOptions
-        // Prefer explicit fullscreen. Combining hideMenuBar+hideDock covers
-        // immersive video without treating “auto-hide menu bar” alone as fullscreen.
+        // Fullscreen spaces, or apps that force-hide the menu bar (cinema /
+        // immersive players). Do not treat system “auto-hide menu bar” alone —
+        // that preference is common on notch Macs and would keep the tab tucked.
         let byPresentation =
             options.contains(.fullScreen)
-            || (options.contains(.hideMenuBar) && options.contains(.hideDock))
+            || options.contains(.hideMenuBar)
 
         let next = byPresentation
         guard next != isFullscreen else { return }
