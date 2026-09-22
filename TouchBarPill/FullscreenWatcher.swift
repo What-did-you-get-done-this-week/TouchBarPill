@@ -217,7 +217,11 @@ final class FullscreenWatcher {
             let alpha = (info[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1
             if alpha < 0.05 { continue }
             let layer = (info[kCGWindowLayer as String] as? NSNumber)?.intValue ?? 0
-            if layer < 0 { continue }
+            // Normal and floating app windows only. Dock, Notification Centre,
+            // and the menu bar own full-screen windows at layer >= 20 that are
+            // not the video — treating them as cinema would hide the notch always.
+            // Browser fullscreen (YouTube) is a layer-0 window the size of the display.
+            if layer < 0 || layer > 8 { continue }
             guard let cg = cgBounds(info) else { continue }
             let cocoa = CinemaGeometry.cocoaRect(fromCGWindow: cg, primaryMaxY: primaryMaxY)
             let hit = cocoa.intersection(screenFrame)

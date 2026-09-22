@@ -12,8 +12,8 @@ Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
 2. Abre TouchBarPill-0.4.3.app (Escritorio o Descargas).
-   Si macOS bloquea sobrescribir un .app antiguo (MACL), usa la copia de
-   Descargas o renómbrala a mano.
+   Si macOS bloquea sobrescribir un .app antiguo (MACL), abre la copia de
+   Descargas o TouchBarPill-0.4.3-fresh.app en el Escritorio.
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
 

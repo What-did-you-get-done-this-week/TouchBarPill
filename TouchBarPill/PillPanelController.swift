@@ -185,6 +185,9 @@ final class PillPanelController: NSObject {
         panel.alphaValue = 1
         panel.setFrame(pinned ? expandedFrame(on: screen) : collapsedFrame(on: screen), display: false)
         root.apply(mirror: mirror, expanded: pinned)
+        // Shadow off before the window is ordered in. Turning it off afterwards
+        // leaves a light rim on side tabs (graphite reads as a floating pill).
+        updatePanelShadow()
         panel.orderFrontRegardless()
         panel.invalidateShadow()
         root.updateTrackingAreas()
@@ -230,7 +233,7 @@ final class PillPanelController: NSObject {
         panel.becomesKeyOnlyIfNeeded = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.isMovable = false
         panel.isMovableByWindowBackground = false
         panel.isRestorable = false
@@ -1076,7 +1079,16 @@ final class PillRootView: NSView {
         }
         let visual = DisplayList.visualCollapsedRect(in: bounds)
         let path = PillShape.path(in: visual, expanded: false, edge: PillPlacement.edge)
-        PillPlacement.theme.fillColor.setFill()
+        let fill = PillPlacement.theme.fillColor
+        fill.setFill()
+        // Same-color stroke covers the 1–2px light fringe the window server
+        // leaves on the inward edge of a side tab.
+        if PillPlacement.edge.isVerticalEdge {
+            fill.setStroke()
+            path.lineWidth = 3
+            path.lineJoinStyle = .round
+            path.stroke()
+        }
         path.fill()
     }
 
