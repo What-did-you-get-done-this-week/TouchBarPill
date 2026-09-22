@@ -1,6 +1,6 @@
 # TouchBarPill
 
-TouchBarPill is a menu-bar utility for a Mac whose Touch Bar still receives taps but no longer draws. It keeps a small black pill at the top center of the screen. Hover the pill and it expands into the live adaptive Touch Bar. Move the pointer away and, after a short delay, it collapses.
+TouchBarPill is a menu-bar utility for a Mac whose Touch Bar still receives taps but no longer draws. Collapsed, it is a black tab flush with the top center of the screen. Hover the tab and it expands into the live adaptive Touch Bar. Move the pointer away and, after a short delay, it collapses. Menus follow the system language (English and Spanish). Opening at login is on by default.
 
 The picture is not a screenshot. Frames come from the same private Touch Bar simulator interface that open-source simulators use, and clicks are posted back into that simulator so the real buttons fire. The physical OLED does not have to work. macOS still renders the bar on the host, which is why Touché can mirror it.
 
@@ -12,11 +12,11 @@ Touché proves the adaptive bar can be mirrored, including system prompts (Allow
 
 TouchBarPill uses that same class of private API, and changes the window:
 
-- Collapsed, it is a capsule about 132×32 points, parked on the top edge, centered on the current screen. The only label is “Touch Bar”.
-- Expanded, the strip is about 75% of the original Touch Bar mirror, width and height, proportions kept.
-- Hover, or a click on the capsule, expands it into a wide strip.
+- Collapsed, it is a notch-style tab about 132×40 points, centered, with its top edge flush against the screen. The top corners are concave ears; the bottom corners are rounded. The only label is “Touch Bar”.
+- Expanded, the strip is 15% larger than the previous three-quarter mirror (scale 0.75 × 1.15), width, height, padding, and fallback type kept in proportion.
+- Hover, or a click on the tab, expands it into a wide strip.
 - The pointer leaving the strip collapses it after 0.4 seconds.
-- There is no Dock icon. A status item has Show/Hide, Preferences, Copy Diagnostics, and Quit.
+- There is no Dock icon. A status item has Show/Hide, Preferences, Open at Login, Copy Diagnostics, and Quit. The menu-bar icon stays.
 
 Volume and brightness controls are not reimplemented. The expanded strip is the adaptive bar itself. If the stream cannot attach, the strip becomes a short message and a Try Again button instead of fake stand-in controls.
 
@@ -66,14 +66,14 @@ killall TouchBarPill
 
 ## What you should see
 
-1. A black capsule at the top center of the screen that has the pointer. Collapsed, it shows only the words Touch Bar.
-2. Moving the pointer onto it grows a black strip about three quarters the width and height of the original bar, proportions kept.
+1. A black tab at the top center of the screen that has the pointer. Its top edge meets the screen edge, with concave ears at the top corners and rounded bottom corners. Collapsed, it shows only the words Touch Bar.
+2. Moving the pointer onto it grows a black strip about 15% larger than the previous three-quarter bar, proportions kept.
 3. The strip shows the same adaptive Touch Bar the frontmost app would draw: Control Strip, function keys, Allow / Don’t Allow, and so on.
 4. Clicking a button in the strip activates that button. Try a Control Strip control, or a button in an app that puts real actions on the Touch Bar.
 5. Leaving the strip collapses it after about 0.4 seconds. Moving back onto it cancels the collapse.
-6. Click the status item for Show/Hide and Quit TouchBarPill. Right-click (or Control-click) the pill for Quit as well. Hide is remembered.
+6. Click the status item for Show/Hide, Open at Login, and Quit TouchBarPill. Right-click (or Control-click) the tab for Quit as well. Hide is remembered. The status-item icon is still the capsule with three dots.
 
-While collapsed, the pill follows the screen under the pointer. It is not dragged. On a notched display the pill sits just below the menu bar so the notch does not cover it. Touch Bar MacBook Pros have no notch; the pill sits in the menu-bar band.
+While collapsed, the tab follows the screen under the pointer and stays flush with that screen’s top edge. It is not dragged. On a notched display the collapsed tab still meets the top edge; the expanded strip sits just below the menu bar so the notch does not cover the controls.
 
 The panel is non-activating and borderless, joins every Space, and is marked `fullScreenAuxiliary` so it can remain visible over full-screen apps. Its window level is one step above status items, which keeps it under pop-up menus. Clicks must not activate TouchBarPill. If they did, the adaptive bar would switch to this app’s empty Touch Bar.
 
@@ -117,7 +117,7 @@ Nothing here is copied from Touché. The call pattern follows public research: [
 
 ## Knobs
 
-These are `defaults` keys, not a preferences UI yet. The bundle id is `com.touchbarpill.TouchBarPill`.
+The collapse delay is still a `defaults` key. Open at login is a real switch in Preferences and in the status menu (on by default). The bundle id is `com.touchbarpill.TouchBarPill`. macOS may ask you to allow the login item under System Settings → General → Login Items; an ad-hoc signature often lands in “needs approval” until you allow it there. Login items require macOS 13 or later (`SMAppService`).
 
 ```sh
 # Collapse delay in seconds. Default 0.4. Clamped to 0.15...2.
@@ -155,16 +155,18 @@ This is a private API. Apple does not document it and has already moved it once.
 
 In this version:
 
-- Menu-bar agent, no Dock icon, Show/Hide, Quit, Preferences.
-- Top-center pill, hover expand, leave-to-collapse with a 0.4 second delay.
+- Menu-bar agent, no Dock icon, Show/Hide, Quit, Preferences. The status item stays.
+- Top-center notch tab, hover expand, leave-to-collapse with a 0.4 second delay.
+- Expanded strip 15% larger than the previous 0.75 scale.
+- Open at login, on by default, via `SMAppService` (macOS 13+).
+- English and Spanish from the system language.
 - Live gen-3 display stream, with clicks forwarded through `DFRTouchBarSimulatorPostEventWithMouseActivity`.
 - A real message when the stream cannot attach, plus Try Again.
-- The pill follows the screen under the pointer while it is collapsed.
+- The tab follows the screen under the pointer while it is collapsed.
 
 Not in this version:
 
-- Login item. Add the built app in System Settings → General → Login Items.
-- A control to pin the pill to one display. It always follows the pointer while collapsed.
+- A control to pin the tab to one display. It always follows the pointer while collapsed.
 - A slider for the collapse delay. The delay is fixed at 0.4 seconds unless the `defaults` key is set. Preferences only displays the value.
 - Notarization, Developer ID signing, and Sparkle.
 - Custom volume or brightness buttons. Those were left out on purpose so a failed stream is obvious.
@@ -176,10 +178,14 @@ TouchBarPill.xcodeproj          Xcode project and shared scheme
 TouchBarPill/main.swift         NSApplication, accessory policy
 TouchBarPill/AppDelegate.swift  Status item, diagnostics
 TouchBarPill/PillPanelController.swift
-                                Panel, hover, frames, collapsed drawing
+                                Panel, hover, frames, notch-tab drawing
 TouchBarPill/TouchBarStreamView.swift
                                 Pointer forwarding into the strip
 TouchBarPill/PreferencesController.swift
+TouchBarPill/LaunchAtLogin.swift  SMAppService login item
+TouchBarPill/L10n.swift            NSLocalizedString helper
+TouchBarPill/en.lproj/Localizable.strings
+TouchBarPill/es.lproj/Localizable.strings
 TouchBarPill/DFRMirror.h
 TouchBarPill/DFRMirror.m        dlopen, simulator, stream, clicks
 TouchBarPill/Info.plist         LSUIElement

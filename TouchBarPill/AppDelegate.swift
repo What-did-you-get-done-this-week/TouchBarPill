@@ -3,6 +3,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var showItem: NSMenuItem!
+    private var loginItem: NSMenuItem!
     private var didTeardown = false
     private var mirror: DFRMirror!
     private var pill: PillPanelController!
@@ -13,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         mirror = DFRMirror()
         pill = PillPanelController(mirror: mirror)
+        LaunchAtLogin.syncOnLaunch()
         preferences.attach(mirror: mirror)
 
         mirror.stateHandler = { [weak self] in
@@ -35,36 +37,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
-        showItem.title = pill.isVisible ? "Hide Touch Bar Pill" : "Show Touch Bar Pill"
+        showItem.title = pill.isVisible ? L("Hide Touch Bar") : L("Show Touch Bar")
+        loginItem.title = LaunchAtLogin.menuTitle()
+        loginItem.state = LaunchAtLogin.userWantsEnabled ? .on : .off
     }
 
     private func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = Self.statusImage()
         item.button?.imagePosition = .imageOnly
-        item.button?.toolTip = "TouchBarPill — click to quit"
+        item.button?.toolTip = L("TouchBarPill — click to quit")
 
         let menu = NSMenu()
         menu.delegate = self
 
-        showItem = NSMenuItem(title: "Hide Touch Bar Pill", action: #selector(togglePill), keyEquivalent: "h")
+        showItem = NSMenuItem(title: L("Hide Touch Bar"), action: #selector(togglePill), keyEquivalent: "h")
         showItem.keyEquivalentModifierMask = [.command, .shift]
         showItem.target = self
         menu.addItem(showItem)
 
         menu.addItem(.separator())
 
-        let preferencesItem = NSMenuItem(title: "Preferences…", action: #selector(showPreferences), keyEquivalent: ",")
+        let preferencesItem = NSMenuItem(title: L("Preferences…"), action: #selector(showPreferences), keyEquivalent: ",")
         preferencesItem.target = self
         menu.addItem(preferencesItem)
 
-        let diagnosticsItem = NSMenuItem(title: "Copy Diagnostics", action: #selector(copyDiagnostics), keyEquivalent: "")
+        loginItem = NSMenuItem(title: LaunchAtLogin.menuTitle(), action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        loginItem.target = self
+        loginItem.state = LaunchAtLogin.userWantsEnabled ? .on : .off
+        menu.addItem(loginItem)
+
+        let diagnosticsItem = NSMenuItem(title: L("Copy Diagnostics"), action: #selector(copyDiagnostics), keyEquivalent: "")
         diagnosticsItem.target = self
         menu.addItem(diagnosticsItem)
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit TouchBarPill", action: #selector(quit(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L("Quit TouchBarPill"), action: #selector(quit(_:)), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -109,6 +118,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         preferences.show()
     }
 
+    @objc private func toggleLaunchAtLogin() {
+        LaunchAtLogin.setEnabled(!LaunchAtLogin.userWantsEnabled)
+        preferences.refresh()
+    }
+
     @objc private func copyDiagnostics() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(Self.diagnosticsText(mirror: mirror), forType: .string)
@@ -121,12 +135,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let notch: String
             if #available(macOS 12.0, *) {
                 let auxiliaryWidth = screen.auxiliaryTopLeftArea?.width ?? 0
-                notch = (auxiliaryWidth > 0 || screen.safeAreaInsets.top > 0) ? "notch" : "no-notch"
+                notch = (auxiliaryWidth > 0 || screen.safeAreaInsets.top > 0) ? L("notch") : L("no-notch")
             } else {
-                notch = "notch-unknown"
+                notch = L("notch-unknown")
             }
             return String(
-                format: "  [%d] %@ origin (%.0f, %.0f) size %.0f x %.0f scale %.1f %@",
+                format: L("  [%d] %@ origin (%.0f, %.0f) size %.0f x %.0f scale %.1f %@"),
                 index,
                 screen.localizedName,
                 screen.frame.origin.x,
@@ -143,8 +157,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         \(ProcessInfo.processInfo.operatingSystemVersionString)
         CollapseDelay: \(PillMetrics.collapseDelay)
         PillHidden: \(UserDefaults.standard.bool(forKey: "PillHidden"))
+        \(LaunchAtLogin.diagnosticLine())
         \(mirror.diagnosticSummary())
-        Screens:
+        \(L("Screens:"))
         \(screens)
         """
     }

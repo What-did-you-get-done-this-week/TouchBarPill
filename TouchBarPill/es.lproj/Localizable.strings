@@ -1,0 +1,60 @@
+/* Menú y etiqueta plegada. "Touch Bar" es el nombre del producto en los dos idiomas. */
+"Touch Bar" = "Touch Bar";
+"Touch Bar unavailable" = "Touch Bar no disponible";
+"Try Again" = "Reintentar";
+"Hide Touch Bar" = "Ocultar Touch Bar";
+"Show Touch Bar" = "Mostrar Touch Bar";
+"Preferences…" = "Preferencias…";
+"Copy Diagnostics" = "Copiar diagnósticos";
+"Quit TouchBarPill" = "Salir de TouchBarPill";
+"Open at Login" = "Abrir al iniciar sesión";
+"Open at Login (approval needed)" = "Abrir al iniciar sesión (falta aprobación)";
+"TouchBarPill — click to quit" = "TouchBarPill — clic para salir";
+
+/* Preferencias */
+"TouchBarPill Preferences" = "Preferencias de TouchBarPill";
+"A black tab sits on the top edge of the screen. Hover it to open the live adaptive Touch Bar, then move away and it folds back into the tab." = "Una pestaña negra queda pegada al borde superior de la pantalla. Pasa el puntero para abrir la Touch Bar adaptativa; al salir, se pliega otra vez.";
+"Stream" = "Señal";
+"Stream unavailable" = "Señal no disponible";
+"Starting…" = "Iniciando…";
+"Collapse delay" = "Retraso al contraer";
+"%.2f seconds" = "%.2f segundos";
+"Fixed for this version. Change it without rebuilding: defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5" = "Fijo en esta versión. Cámbialo sin recompilar: defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5";
+"Open at login" = "Abrir al iniciar sesión";
+"On by default. macOS may ask you to allow the login item under System Settings → General → Login Items." = "Activado por omisión. macOS puede pedirte que permitas el ítem de inicio en Ajustes del Sistema → General → Ítems de inicio.";
+"macOS still needs approval before TouchBarPill can open at login. Allow it under System Settings → General → Login Items." = "macOS todavía tiene que aprobar que TouchBarPill se abra al iniciar sesión. Permítelo en Ajustes del Sistema → General → Ítems de inicio.";
+"Opening at login requires macOS 13 or later." = "Abrir al iniciar sesión requiere macOS 13 o posterior.";
+"Could not update the login item: %@" = "No se pudo cambiar el ítem de inicio: %@";
+"Display" = "Pantalla";
+"While collapsed, the tab follows the screen under the pointer. There is no pin-to-display control yet." = "Plegada, la pestaña sigue la pantalla que está bajo el puntero. Todavía no hay un control para fijarla a una pantalla.";
+
+/* Diagnósticos */
+"Screens:" = "Pantallas:";
+"notch" = "con muesca";
+"no-notch" = "sin muesca";
+"notch-unknown" = "muesca desconocida";
+"  [%d] %@ origin (%.0f, %.0f) size %.0f x %.0f scale %.1f %@" = "  [%d] %@ origen (%.0f, %.0f) tamaño %.0f x %.0f escala %.1f %@";
+"Launch at login: %@ (%@)" = "Abrir al iniciar sesión: %@ (%@)";
+"on" = "sí";
+"off" = "no";
+"enabled" = "activado";
+"not registered" = "no registrado";
+"needs approval" = "necesita aprobación";
+"not found" = "no encontrado";
+"needs macOS 13" = "requiere macOS 13";
+
+/* Estado de la señal, también en Preferencias */
+"Not started." = "No se ha iniciado.";
+"The Touch Bar simulator did not start. Quit Touché if it is open, then choose Try Again. The gen-3 entry point returned nil." = "El simulador de la Touch Bar no arrancó. Cierra Touché si está abierto y pulsa Reintentar. El punto de entrada gen-3 devolvió nil.";
+"The simulator started but did not hand back a Touch Bar object." = "El simulador arrancó, pero no devolvió un objeto de Touch Bar.";
+"The simulator started, but DFRTouchBarCreateDisplayStream returned NULL. This macOS build may have changed the stream entry point." = "El simulador arrancó, pero DFRTouchBarCreateDisplayStream devolvió NULL. Esta versión de macOS puede haber cambiado el punto de entrada de la señal.";
+"The Touch Bar display stream refused to start (CGError %d)." = "La señal de la Touch Bar no arrancó (CGError %d).";
+"Waiting for the adaptive Touch Bar. Press fn, or focus an app that shows Touch Bar controls." = "Esperando la Touch Bar adaptativa. Pulsa fn o enfoca una app que muestre controles de Touch Bar.";
+"The picture stream is attached, but click forwarding is missing (DFRTouchBarSimulatorPostEventWithMouseActivity)." = "La señal de imagen está conectada, pero falta el reenvío de clics (DFRTouchBarSimulatorPostEventWithMouseActivity).";
+"DFRFoundation is not on this Mac, so there is no Touch Bar simulator to mirror. The pill still works; the picture does not. A dead Touch Bar OLED is fine — a missing framework is not." = "DFRFoundation no está en este Mac, así que no hay un simulador de Touch Bar que reflejar. La pestaña sigue funcionando; la imagen no. Una OLED de Touch Bar muerta no importa: lo que falta es el framework.";
+"DFRFoundation loaded, but the gen-3 simulator symbols are missing. This macOS version removed DFRTouchBarSimulatorCreate. The legacy stream API is not used, because it blanks some real Touch Bars." = "DFRFoundation se cargó, pero faltan los símbolos del simulador gen-3. Esta versión de macOS eliminó DFRTouchBarSimulatorCreate. No se usa la API antigua, porque apaga algunas Touch Bar reales.";
+"Core Image could not read a Touch Bar frame." = "Core Image no pudo leer un fotograma de la Touch Bar.";
+"A Touch Bar frame had an empty image extent." = "Un fotograma de la Touch Bar tenía una extensión de imagen vacía.";
+"Core Image could not draw a Touch Bar frame." = "Core Image no pudo dibujar un fotograma de la Touch Bar.";
+"Mirroring the live adaptive Touch Bar." = "Reflejando la Touch Bar adaptativa en vivo.";
+"Mirroring the Touch Bar picture. Clicks are unavailable on this OS build." = "Reflejando la imagen de la Touch Bar. Los clics no están disponibles en esta versión del sistema.";

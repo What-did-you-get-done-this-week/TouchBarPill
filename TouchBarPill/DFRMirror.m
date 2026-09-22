@@ -72,7 +72,7 @@ static NSString *DFRFrameworkPath(void) {
 - (instancetype)init {
     self = [super init];
     if (self) {
-        _statusMessage = @"Not started.";
+        _statusMessage = NSLocalizedString(@"Not started.", @"");
         _touchBarPointSize = CGSizeMake(1004, 30);
         _dlError = @"";
         _loadedPath = @"";
@@ -123,7 +123,7 @@ static NSString *DFRFrameworkPath(void) {
 
     id simulator = _create(kDFRSecondGeneration, nil, kDFRSecondGeneration);
     if (!simulator) {
-        self.statusMessage = @"The Touch Bar simulator did not start. Quit Touché if it is open, then choose Try Again. The gen-3 entry point returned nil.";
+        self.statusMessage = NSLocalizedString(@"The Touch Bar simulator did not start. Quit Touché if it is open, then choose Try Again. The gen-3 entry point returned nil.", @"");
         os_log_error(DFRLog(), "DFRTouchBarSimulatorCreate returned nil");
         [self publish];
         return;
@@ -133,7 +133,7 @@ static NSString *DFRFrameworkPath(void) {
 
     id touchBar = _getTouchBar(simulator);
     if (!touchBar) {
-        self.statusMessage = @"The simulator started but did not hand back a Touch Bar object.";
+        self.statusMessage = NSLocalizedString(@"The simulator started but did not hand back a Touch Bar object.", @"");
         os_log_error(DFRLog(), "DFRTouchBarSimulatorGetTouchBar returned nil");
         [self stop];
         [self publish];
@@ -158,7 +158,7 @@ static NSString *DFRFrameworkPath(void) {
 
     CGDisplayStreamRef stream = _createStream(touchBar, 0, dispatch_get_main_queue(), self.frameHandler);
     if (!stream) {
-        self.statusMessage = @"The simulator started, but DFRTouchBarCreateDisplayStream returned NULL. This macOS build may have changed the stream entry point.";
+        self.statusMessage = NSLocalizedString(@"The simulator started, but DFRTouchBarCreateDisplayStream returned NULL. This macOS build may have changed the stream entry point.", @"");
         os_log_error(DFRLog(), "DFRTouchBarCreateDisplayStream returned NULL");
         [self stop];
         [self publish];
@@ -168,7 +168,7 @@ static NSString *DFRFrameworkPath(void) {
 
     CGError error = CGDisplayStreamStart(stream);
     if (error != kCGErrorSuccess) {
-        self.statusMessage = [NSString stringWithFormat:@"The Touch Bar display stream refused to start (CGError %d).", (int)error];
+        self.statusMessage = [NSString stringWithFormat:NSLocalizedString(@"The Touch Bar display stream refused to start (CGError %d).", @""), (int)error];
         os_log_error(DFRLog(), "CGDisplayStreamStart failed: %d", (int)error);
         [self stop];
         [self publish];
@@ -178,9 +178,9 @@ static NSString *DFRFrameworkPath(void) {
     self.simulatorReady = YES;
     self.clicksEnabled = (_post != NULL);
     if (self.clicksEnabled) {
-        self.statusMessage = @"Waiting for the adaptive Touch Bar. Press fn, or focus an app that shows Touch Bar controls.";
+        self.statusMessage = NSLocalizedString(@"Waiting for the adaptive Touch Bar. Press fn, or focus an app that shows Touch Bar controls.", @"");
     } else {
-        self.statusMessage = @"The picture stream is attached, but click forwarding is missing (DFRTouchBarSimulatorPostEventWithMouseActivity).";
+        self.statusMessage = NSLocalizedString(@"The picture stream is attached, but click forwarding is missing (DFRTouchBarSimulatorPostEventWithMouseActivity).", @"");
     }
     os_log_info(DFRLog(), "simulator started, point size %.1f x %.1f, clicks %d",
                 self.touchBarPointSize.width, self.touchBarPointSize.height, self.clicksEnabled);
@@ -297,7 +297,7 @@ static NSString *DFRFrameworkPath(void) {
             const char *error = dlerror();
             _dlError = error ? [NSString stringWithUTF8String:error] : @"dlopen failed";
             _loadedPath = DFRFrameworkPath();
-            self.statusMessage = @"DFRFoundation is not on this Mac, so there is no Touch Bar simulator to mirror. The pill still works; the picture does not. A dead Touch Bar OLED is fine — a missing framework is not.";
+            self.statusMessage = NSLocalizedString(@"DFRFoundation is not on this Mac, so there is no Touch Bar simulator to mirror. The pill still works; the picture does not. A dead Touch Bar OLED is fine — a missing framework is not.", @"");
             os_log_error(DFRLog(), "dlopen failed: %{public}@", _dlError);
             return NO;
         }
@@ -314,7 +314,7 @@ static NSString *DFRFrameworkPath(void) {
     _screenSize = (DFRScreenSizeFn)[self lookup:"DFRGetScreenSize" found:&_symScreenSize];
 
     if (!_create || !_getTouchBar || !_createStream) {
-        self.statusMessage = @"DFRFoundation loaded, but the gen-3 simulator symbols are missing. This macOS version removed DFRTouchBarSimulatorCreate. The legacy stream API is not used, because it blanks some real Touch Bars.";
+        self.statusMessage = NSLocalizedString(@"DFRFoundation loaded, but the gen-3 simulator symbols are missing. This macOS version removed DFRTouchBarSimulatorCreate. The legacy stream API is not used, because it blanks some real Touch Bars.", @"");
         os_log_error(DFRLog(), "missing required symbol");
         return NO;
     }
@@ -380,7 +380,7 @@ static NSString *DFRFrameworkPath(void) {
 
     CIImage *image = [CIImage imageWithIOSurface:surface];
     if (!image) {
-        [self noteBlitFailure:@"Core Image could not read a Touch Bar frame."];
+        [self noteBlitFailure:NSLocalizedString(@"Core Image could not read a Touch Bar frame.", @"")];
         return;
     }
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"FlipStreamVertically"]) {
@@ -388,7 +388,7 @@ static NSString *DFRFrameworkPath(void) {
     }
     CGRect extent = image.extent;
     if (CGRectIsEmpty(extent) || CGRectIsInfinite(extent)) {
-        [self noteBlitFailure:@"A Touch Bar frame had an empty image extent."];
+        [self noteBlitFailure:NSLocalizedString(@"A Touch Bar frame had an empty image extent.", @"")];
         return;
     }
     if (!self.ciContext) {
@@ -396,7 +396,7 @@ static NSString *DFRFrameworkPath(void) {
     }
     CGImageRef picture = [self.ciContext createCGImage:image fromRect:extent];
     if (!picture) {
-        [self noteBlitFailure:@"Core Image could not draw a Touch Bar frame."];
+        [self noteBlitFailure:NSLocalizedString(@"Core Image could not draw a Touch Bar frame.", @"")];
         return;
     }
 
@@ -422,8 +422,8 @@ static NSString *DFRFrameworkPath(void) {
         self.hasFrame = YES;
         self.simulatorReady = YES;
         self.statusMessage = self.clicksEnabled
-            ? @"Mirroring the live adaptive Touch Bar."
-            : @"Mirroring the Touch Bar picture. Clicks are unavailable on this OS build.";
+            ? NSLocalizedString(@"Mirroring the live adaptive Touch Bar.", @"")
+            : NSLocalizedString(@"Mirroring the Touch Bar picture. Clicks are unavailable on this OS build.", @"");
         [self publish];
     }
 }

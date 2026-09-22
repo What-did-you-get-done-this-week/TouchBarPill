@@ -2,11 +2,15 @@ import AppKit
 import QuartzCore
 
 enum PillMetrics {
-    /// Collapsed capsule. Not scaled — only its label changed.
-    static let collapsedSize = NSSize(width: 132, height: 32)
+    /// Collapsed notch tab. Width stays 132. Height grows a little so the
+    /// concave ears at the screen edge have room above the label.
+    static let collapsedSize = NSSize(width: 132, height: 40)
+    static let notchEarRadius: CGFloat = 14
+    static let notchBottomRadius: CGFloat = 13
 
-    /// Expanded strip only: 75% of the original 36-pt bar, proportions kept.
-    static let expandedScale: CGFloat = 0.75
+    /// Expanded strip: 15% larger than the previous 0.75 scale (0.75 × 1.15).
+    static let expandedScale: CGFloat = 0.75 * 1.15
+    static let expandedChromeScale: CGFloat = 1.15
     static let streamHeight: CGFloat = 36 * expandedScale
     static let streamPadX: CGFloat = 8 * expandedScale
     static let streamPadY: CGFloat = 6 * expandedScale
@@ -14,6 +18,13 @@ enum PillMetrics {
     static let fallbackCardSize = NSSize(width: 520 * expandedScale, height: 136 * expandedScale)
     static let fallbackInset = NSSize(width: 16 * expandedScale, height: 12 * expandedScale)
     static let minExpandedWidth: CGFloat = 320 * expandedScale
+    static let fallbackTitleFont: CGFloat = 13 * expandedChromeScale
+    static let fallbackBodyFont: CGFloat = 11 * expandedChromeScale
+    static let fallbackTitleHeight: CGFloat = 18 * expandedChromeScale
+    static let fallbackButtonWidth: CGFloat = 96 * expandedChromeScale
+    static let fallbackButtonHeight: CGFloat = 24 * expandedChromeScale
+    static let fallbackBodyBottom: CGFloat = 28 * expandedChromeScale
+    static let fallbackBodyTrim: CGFloat = 48 * expandedChromeScale
 
     /// Leave-collapse delay. Hardcoded at 0.4s unless overridden:
     /// `defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5`
@@ -27,8 +38,28 @@ enum PillMetrics {
 /// Borderless, non-activating panel. Clicks must not activate TouchBarPill,
 /// or the adaptive Touch Bar would switch to this app's empty bar.
 final class PillPanel: NSPanel {
+    /// Window coordinates. Transparent ear pockets should not eat clicks.
+    var shapeContains: ((NSPoint) -> Bool)?
+
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    override func sendEvent(_ event: NSEvent) {
+        switch event.type {
+        case .mouseEntered, .mouseExited:
+            super.sendEvent(event)
+            return
+        default:
+            break
+        }
+        if let content = contentView, let shapeContains {
+            let local = content.convert(event.locationInWindow, from: nil)
+            if !shapeContains(local) {
+                return
+            }
+        }
+        super.sendEvent(event)
+    }
 }
 
 final class PillPanelController: NSObject {
@@ -55,6 +86,10 @@ final class PillPanelController: NSObject {
         root = PillRootView(frame: NSRect(origin: .zero, size: PillMetrics.collapsedSize))
         super.init()
         configurePanel()
+        panel.shapeContains = { [weak root] point in
+            guard let root else { return false }
+            return PillShape.path(in: root.bounds, expanded: root.showsExpandedShape).contains(point)
+        }
         root.onEntered = { [weak self] in self?.pointerEntered() }
         root.onExited = { [weak self] in self?.pointerExited() }
         root.onRetry = { [weak self] in self?.retry() }
@@ -138,7 +173,7 @@ final class PillPanelController: NSObject {
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.setAccessibilityRole(.window)
-        panel.setAccessibilityLabel("Touch Bar pill")
+        panel.setAccessibilityLabel(L("Touch Bar"))
         root.autoresizingMask = [.width, .height]
         panel.contentView = root
     }
@@ -245,9 +280,11 @@ final class PillPanelController: NSObject {
 
     private func collapsedFrame(on screen: NSScreen) -> NSRect {
         let size = PillMetrics.collapsedSize
+        // Flush with the physical top. The notch path's straight edge is the
+        // window's top edge, so no menu-bar gap here. Expanded still uses topGap.
         return NSRect(
             x: screen.frame.midX - size.width / 2,
-            y: screen.frame.maxY - size.height - topGap(on: screen),
+            y: screen.frame.maxY - size.height,
             width: size.width,
             height: size.height
         )
@@ -310,16 +347,13 @@ final class PillRootView: NSView {
     private let chrome = CollapsedChromeView(frame: .zero)
     private let fallback = FallbackView(frame: .zero)
     private var tracking: NSTrackingArea?
-    private var expanded = false
+    private(set) var showsExpandedShape = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.backgroundColor = NSColor(calibratedWhite: 0.04, alpha: 0.97).cgColor
-        layer?.cornerCurve = CALayerCornerCurve.continuous
-        layer?.masksToBounds = true
-        layer?.borderWidth = 1
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
+        layerContentsRedrawPolicy = .duringViewResize
+        layer?.backgroundColor = NSColor.clear.cgColor
         addSubview(streamView)
         addSubview(chrome)
         addSubview(fallback)
@@ -341,9 +375,9 @@ final class PillRootView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     func apply(mirror: DFRMirror, expanded: Bool) {
-        self.expanded = expanded
+        showsExpandedShape = expanded
         chrome.needsDisplay = true
-        fallback.title = mirror.simulatorReady ? "Touch Bar" : "Touch Bar unavailable"
+        fallback.title = mirror.simulatorReady ? L("Touch Bar") : L("Touch Bar unavailable")
         fallback.message = mirror.statusMessage
         chrome.isHidden = expanded
         chrome.alphaValue = expanded ? 0 : 1
@@ -352,12 +386,12 @@ final class PillRootView: NSView {
         fallback.isHidden = !expanded || mirror.hasFrame
         fallback.alphaValue = fallback.isHidden ? 0 : 1
         needsLayout = true
-        updateCornerRadius()
+        updateChrome()
     }
 
     override func layout() {
         super.layout()
-        updateCornerRadius()
+        updateChrome()
         streamView.frame = bounds.insetBy(dx: PillMetrics.streamPadX, dy: PillMetrics.streamPadY)
         chrome.frame = bounds
         fallback.frame = bounds.insetBy(dx: PillMetrics.fallbackInset.width, dy: PillMetrics.fallbackInset.height)
@@ -379,6 +413,18 @@ final class PillRootView: NSView {
         tracking = area
     }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        guard PillShape.path(in: bounds, expanded: showsExpandedShape).contains(local) else { return nil }
+        return super.hitTest(point)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let path = PillShape.path(in: bounds, expanded: showsExpandedShape)
+        NSColor(calibratedWhite: 0.04, alpha: 0.97).setFill()
+        path.fill()
+    }
+
     override func mouseEntered(with event: NSEvent) {
         onEntered?()
     }
@@ -392,7 +438,7 @@ final class PillRootView: NSView {
             presentQuitMenu(with: event)
             return
         }
-        if !expanded {
+        if !showsExpandedShape {
             onEntered?()
         }
     }
@@ -403,7 +449,7 @@ final class PillRootView: NSView {
 
     private func presentQuitMenu(with event: NSEvent) {
         let menu = NSMenu()
-        let quit = NSMenuItem(title: "Quit TouchBarPill", action: #selector(performQuit(_:)), keyEquivalent: "")
+        let quit = NSMenuItem(title: L("Quit TouchBarPill"), action: #selector(performQuit(_:)), keyEquivalent: "")
         quit.target = self
         menu.addItem(quit)
         NSMenu.popUpContextMenu(menu, with: event, for: self)
@@ -413,9 +459,75 @@ final class PillRootView: NSView {
         onQuit?()
     }
 
-    private func updateCornerRadius() {
-        let radius: CGFloat = expanded ? min(PillMetrics.expandedCornerRadius, bounds.height / 2) : bounds.height / 2
-        layer?.cornerRadius = radius
+    private func updateChrome() {
+        guard let layer else { return }
+        layer.backgroundColor = NSColor.clear.cgColor
+        if showsExpandedShape {
+            layer.masksToBounds = true
+            layer.cornerCurve = .continuous
+            layer.cornerRadius = min(PillMetrics.expandedCornerRadius, bounds.height / 2)
+            layer.borderWidth = 1
+            layer.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
+        } else {
+            layer.masksToBounds = false
+            layer.cornerRadius = 0
+            layer.borderWidth = 0
+        }
+        needsDisplay = true
+    }
+}
+
+/// Collapsed: a tab hanging from the screen edge. The top side is straight and
+/// flush with the window top. Each top corner is a concave quarter that sweeps
+/// inward into the vertical side. The bottom corners are ordinary convex rounds.
+enum PillShape {
+    static func path(in rect: NSRect, expanded: Bool) -> NSBezierPath {
+        if expanded {
+            let radius = min(PillMetrics.expandedCornerRadius, rect.height / 2, rect.width / 2)
+            return NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        }
+        return notchTab(in: rect)
+    }
+
+    static func notchTab(in rect: NSRect) -> NSBezierPath {
+        let ear = min(PillMetrics.notchEarRadius, max(4, rect.height * 0.45), max(4, rect.width / 4))
+        let bottom = min(PillMetrics.notchBottomRadius, max(4, rect.height - ear - 2), max(4, rect.width / 2 - ear - 1))
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: rect.minX, y: rect.maxY))
+        path.line(to: NSPoint(x: rect.maxX, y: rect.maxY))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.maxX, y: rect.maxY - ear),
+            radius: ear,
+            startAngle: 90,
+            endAngle: 180,
+            clockwise: false
+        )
+        path.line(to: NSPoint(x: rect.maxX - ear, y: rect.minY + bottom))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.maxX - ear - bottom, y: rect.minY + bottom),
+            radius: bottom,
+            startAngle: 0,
+            endAngle: -90,
+            clockwise: true
+        )
+        path.line(to: NSPoint(x: rect.minX + ear + bottom, y: rect.minY))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.minX + ear + bottom, y: rect.minY + bottom),
+            radius: bottom,
+            startAngle: -90,
+            endAngle: -180,
+            clockwise: true
+        )
+        path.line(to: NSPoint(x: rect.minX + ear, y: rect.maxY - ear))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.minX, y: rect.maxY - ear),
+            radius: ear,
+            startAngle: 0,
+            endAngle: 90,
+            clockwise: false
+        )
+        path.close()
+        return path
     }
 }
 
@@ -429,10 +541,10 @@ final class CollapsedChromeView: NSView {
 
     override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
 
-    override func accessibilityLabel() -> String? { isHidden ? nil : "Touch Bar" }
+    override func accessibilityLabel() -> String? { isHidden ? nil : L("Touch Bar") }
 
     override func draw(_ dirtyRect: NSRect) {
-        let title = "Touch Bar" as NSString
+        let title = L("Touch Bar") as NSString
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
             .foregroundColor: NSColor.white.withAlphaComponent(0.94),
@@ -440,7 +552,7 @@ final class CollapsedChromeView: NSView {
         let textSize = title.size(withAttributes: attributes)
         let origin = NSPoint(
             x: floor((bounds.width - textSize.width) / 2),
-            y: floor((bounds.height - textSize.height) / 2)
+            y: floor((bounds.height - textSize.height) / 2) - 2
         )
         title.draw(at: origin, withAttributes: attributes)
     }
@@ -450,9 +562,9 @@ final class FallbackView: NSView {
     var onRetry: (() -> Void)?
     var onContextMenu: ((NSEvent) -> Void)?
 
-    private let titleField = NSTextField(labelWithString: "Touch Bar")
+    private let titleField = NSTextField(labelWithString: L("Touch Bar"))
     private let bodyField = NSTextField(wrappingLabelWithString: "")
-    private let button = NSButton(title: "Try Again", target: nil, action: nil)
+    private let button = NSButton(title: L("Try Again"), target: nil, action: nil)
 
     var title: String {
         get { titleField.stringValue }
@@ -466,9 +578,9 @@ final class FallbackView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        titleField.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleField.font = .systemFont(ofSize: PillMetrics.fallbackTitleFont, weight: .semibold)
         titleField.textColor = NSColor.white.withAlphaComponent(0.94)
-        bodyField.font = .systemFont(ofSize: 11)
+        bodyField.font = .systemFont(ofSize: PillMetrics.fallbackBodyFont)
         bodyField.textColor = NSColor.white.withAlphaComponent(0.68)
         bodyField.maximumNumberOfLines = 3
         bodyField.cell?.wraps = true
@@ -491,10 +603,11 @@ final class FallbackView: NSView {
     override func layout() {
         super.layout()
         let width = bounds.width
-        titleField.frame = NSRect(x: 0, y: bounds.height - 18, width: width, height: 18)
-        button.frame = NSRect(x: 0, y: 0, width: 96, height: 24)
-        let bodyHeight = max(0, bounds.height - 48)
-        bodyField.frame = NSRect(x: 0, y: 28, width: width, height: bodyHeight)
+        let titleHeight = PillMetrics.fallbackTitleHeight
+        titleField.frame = NSRect(x: 0, y: bounds.height - titleHeight, width: width, height: titleHeight)
+        button.frame = NSRect(x: 0, y: 0, width: PillMetrics.fallbackButtonWidth, height: PillMetrics.fallbackButtonHeight)
+        let bodyHeight = max(0, bounds.height - PillMetrics.fallbackBodyTrim)
+        bodyField.frame = NSRect(x: 0, y: PillMetrics.fallbackBodyBottom, width: width, height: bodyHeight)
         bodyField.preferredMaxLayoutWidth = width
     }
 
