@@ -1,6 +1,6 @@
 # TouchBarPill
 
-TouchBarPill is a menu-bar utility for a Mac whose Touch Bar still receives taps but no longer draws. Collapsed, it is a black tab flush with the top center of the screen. Hover the tab and it expands into the live adaptive Touch Bar. Move the pointer away and, after a short delay, it collapses. Menus follow the system language (English and Spanish). Opening at login is on by default.
+TouchBarPill is a menu-bar utility for a Mac whose Touch Bar still receives taps but no longer draws. Collapsed, it is a black tab flush with the top center of the screen. Hover the tab and it expands into the live adaptive Touch Bar. Move the pointer away and, after a short delay, it collapses. Menus follow the system language (English and Spanish). Opening at login stays off until you turn it on.
 
 The picture is not a screenshot. Frames come from the same private Touch Bar simulator interface that open-source simulators use, and clicks are posted back into that simulator so the real buttons fire. The physical OLED does not have to work. macOS still renders the bar on the host, which is why Touché can mirror it.
 
@@ -12,7 +12,7 @@ Touché proves the adaptive bar can be mirrored, including system prompts (Allow
 
 TouchBarPill uses that same class of private API, and changes the window:
 
-- Collapsed, it is a notch-style tab about 132×40 points, centered, with its top edge flush against the screen. The top corners are concave ears; the bottom corners are rounded. The only label is “Touch Bar”.
+- Collapsed, it is a notch-style tab about 132×32 points, centered, with its top edge flush against the screen. The top corners are concave ears; the bottom corners are rounded. The only label is “Touch Bar”.
 - Expanded, the strip is 15% larger than the previous three-quarter mirror (scale 0.75 × 1.15), width, height, padding, and fallback type kept in proportion.
 - Hover, or a click on the tab, expands it into a wide strip.
 - The pointer leaving the strip collapses it after 0.4 seconds.
@@ -117,7 +117,7 @@ Nothing here is copied from Touché. The call pattern follows public research: [
 
 ## Knobs
 
-The collapse delay is still a `defaults` key. Open at login is a real switch in Preferences and in the status menu (on by default). The bundle id is `com.touchbarpill.TouchBarPill`. macOS may ask you to allow the login item under System Settings → General → Login Items; an ad-hoc signature often lands in “needs approval” until you allow it there. Login items require macOS 13 or later (`SMAppService`).
+The collapse delay is still a `defaults` key. Open at login is off until the user turns it on from the status menu or Preferences. The app does not register a login item at launch. The bundle id is `com.touchbarpill.TouchBarPill`. Turning it on uses `SMAppService` (macOS 13+). If macOS needs approval, TouchBarPill explains that and can open System Settings → General → Login Items. Login items require macOS 13 or later.
 
 ```sh
 # Collapse delay in seconds. Default 0.4. Clamped to 0.15...2.
@@ -158,7 +158,7 @@ In this version:
 - Menu-bar agent, no Dock icon, Show/Hide, Quit, Preferences. The status item stays.
 - Top-center notch tab, hover expand, leave-to-collapse with a 0.4 second delay.
 - Expanded strip 15% larger than the previous 0.75 scale.
-- Open at login, on by default, via `SMAppService` (macOS 13+).
+- Open at login, off by default. The status menu and Preferences can turn it on with `SMAppService` (macOS 13+). Launch does not register it.
 - English and Spanish from the system language.
 - Live gen-3 display stream, with clicks forwarded through `DFRTouchBarSimulatorPostEventWithMouseActivity`.
 - A real message when the stream cannot attach, plus Try Again.

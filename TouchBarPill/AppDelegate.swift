@@ -14,7 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         mirror = DFRMirror()
         pill = PillPanelController(mirror: mirror)
-        LaunchAtLogin.syncOnLaunch()
+        // Never register a login item here. The old default-on path called
+        // SMAppService at launch and macOS answered with an admin password sheet.
+        LaunchAtLogin.forgetLegacyPreference()
         preferences.attach(mirror: mirror)
 
         mirror.stateHandler = { [weak self] in
@@ -39,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         showItem.title = pill.isVisible ? L("Hide Touch Bar") : L("Show Touch Bar")
         loginItem.title = LaunchAtLogin.menuTitle()
-        loginItem.state = LaunchAtLogin.userWantsEnabled ? .on : .off
+        loginItem.state = LaunchAtLogin.isOn ? .on : .off
     }
 
     private func buildStatusItem() {
@@ -62,9 +64,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         preferencesItem.target = self
         menu.addItem(preferencesItem)
 
-        loginItem = NSMenuItem(title: LaunchAtLogin.menuTitle(), action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        loginItem = NSMenuItem(title: L("Open at Login"), action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         loginItem.target = self
-        loginItem.state = LaunchAtLogin.userWantsEnabled ? .on : .off
+        loginItem.state = .off
         menu.addItem(loginItem)
 
         let diagnosticsItem = NSMenuItem(title: L("Copy Diagnostics"), action: #selector(copyDiagnostics), keyEquivalent: "")
@@ -119,8 +121,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleLaunchAtLogin() {
-        LaunchAtLogin.setEnabled(!LaunchAtLogin.userWantsEnabled)
+        let outcome = LaunchAtLogin.setEnabled(!LaunchAtLogin.isOn)
+        loginItem.state = LaunchAtLogin.isOn ? .on : .off
+        loginItem.title = LaunchAtLogin.menuTitle()
         preferences.refresh()
+        if outcome == .needsSettings {
+            LaunchAtLogin.presentHelp()
+        }
     }
 
     @objc private func copyDiagnostics() {

@@ -8,6 +8,8 @@ final class PreferencesController: NSWindowController {
     private let delayValue = NSTextField(labelWithString: "")
     private let loginSwitch = NSSwitch()
     private let loginNote = NSTextField(wrappingLabelWithString: "")
+    private let loginSettingsButton = NSButton(title: L("Open Login Items Settings"), target: nil, action: nil)
+    private var loginButtonHeight: NSLayoutConstraint?
     private var mirror: DFRMirror?
 
     convenience init() {
@@ -30,6 +32,7 @@ final class PreferencesController: NSWindowController {
 
     func show() {
         refresh()
+        refreshLogin()
         window?.center()
         if #available(macOS 14.0, *) {
             NSApp.activate()
@@ -44,9 +47,18 @@ final class PreferencesController: NSWindowController {
         statusTitle.stringValue = mirror.simulatorReady ? L("Stream") : L("Stream unavailable")
         statusBody.stringValue = mirror.statusMessage
         delayValue.stringValue = String(format: L("%.2f seconds"), PillMetrics.collapseDelay)
-        loginSwitch.state = LaunchAtLogin.userWantsEnabled ? .on : .off
+        if window?.isVisible == true {
+            refreshLogin()
+        }
+    }
+
+    func refreshLogin() {
+        loginSwitch.state = LaunchAtLogin.isOn ? .on : .off
         loginSwitch.isEnabled = LaunchAtLogin.isSupported
         loginNote.stringValue = LaunchAtLogin.note()
+        let showSettings = LaunchAtLogin.needsSettingsButton
+        loginSettingsButton.isHidden = !showSettings
+        loginButtonHeight?.constant = showSettings ? 28 : 0
     }
 
     private func buildContent() {
@@ -92,6 +104,11 @@ final class PreferencesController: NSWindowController {
         loginNote.textColor = .tertiaryLabelColor
         loginNote.preferredMaxLayoutWidth = 440
         loginNote.maximumNumberOfLines = 4
+        loginSettingsButton.bezelStyle = .rounded
+        loginSettingsButton.target = self
+        loginSettingsButton.action = #selector(openLoginSettings(_:))
+        loginSettingsButton.isHidden = true
+        loginButtonHeight = loginSettingsButton.heightAnchor.constraint(equalToConstant: 0)
 
         let displayLabel = NSTextField(labelWithString: L("Display"))
         displayLabel.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -103,7 +120,7 @@ final class PreferencesController: NSWindowController {
         let copy = NSButton(title: L("Copy Diagnostics"), target: self, action: #selector(copyDiagnostics))
         copy.bezelStyle = .rounded
 
-        let views: [NSView] = [heading, intro, statusTitle, statusBody, delayLabel, delayValue, delayNote, loginLabel, loginSwitch, loginNote, displayLabel, displayNote, copy]
+        let views: [NSView] = [heading, intro, statusTitle, statusBody, delayLabel, delayValue, delayNote, loginLabel, loginSwitch, loginNote, loginSettingsButton, displayLabel, displayNote, copy]
         for view in views {
             view.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(view)
@@ -144,7 +161,11 @@ final class PreferencesController: NSWindowController {
             loginNote.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
             loginNote.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
 
-            displayLabel.topAnchor.constraint(equalTo: loginNote.bottomAnchor, constant: 12),
+            loginSettingsButton.topAnchor.constraint(equalTo: loginNote.bottomAnchor, constant: 8),
+            loginSettingsButton.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
+            loginButtonHeight!,
+
+            displayLabel.topAnchor.constraint(equalTo: loginSettingsButton.bottomAnchor, constant: 12),
             displayLabel.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
             displayLabel.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
 
@@ -158,8 +179,15 @@ final class PreferencesController: NSWindowController {
     }
 
     @objc private func loginSwitchChanged(_ sender: NSSwitch) {
-        LaunchAtLogin.setEnabled(sender.state == .on)
+        let outcome = LaunchAtLogin.setEnabled(sender.state == .on)
         refresh()
+        if outcome == .needsSettings {
+            LaunchAtLogin.presentHelp()
+        }
+    }
+
+    @objc private func openLoginSettings(_ sender: NSButton) {
+        LaunchAtLogin.openSettings()
     }
 
     @objc private func copyDiagnostics() {

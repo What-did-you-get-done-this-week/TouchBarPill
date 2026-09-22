@@ -21,8 +21,13 @@
 "%.2f seconds" = "%.2f segundos";
 "Fixed for this version. Change it without rebuilding: defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5" = "Fijo en esta versión. Cámbialo sin recompilar: defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5";
 "Open at login" = "Abrir al iniciar sesión";
-"On by default. macOS may ask you to allow the login item under System Settings → General → Login Items." = "Activado por omisión. macOS puede pedirte que permitas el ítem de inicio en Ajustes del Sistema → General → Ítems de inicio.";
-"macOS still needs approval before TouchBarPill can open at login. Allow it under System Settings → General → Login Items." = "macOS todavía tiene que aprobar que TouchBarPill se abra al iniciar sesión. Permítelo en Ajustes del Sistema → General → Ítems de inicio.";
+"Off by default. Turn it on here or from the menu-bar icon. macOS may then ask you to allow TouchBarPill under System Settings → General → Login Items." = "Desactivado por omisión. Actívalo aquí o desde el icono de la barra de menú. macOS puede pedirte entonces que permitas TouchBarPill en Ajustes del Sistema → General → Ítems de inicio.";
+"TouchBarPill will open when you log in. Turn this off to remove it from Login Items." = "TouchBarPill se abrirá al iniciar sesión. Desactívalo para quitarlo de Ítems de inicio.";
+"macOS still needs your OK before TouchBarPill can open at login. Allow it under System Settings → General → Login Items." = "macOS todavía necesita tu permiso para que TouchBarPill se abra al iniciar sesión. Permítelo en Ajustes del Sistema → General → Ítems de inicio.";
+"Allow TouchBarPill in Login Items" = "Permitir TouchBarPill en Ítems de inicio";
+"Open at Login is still off. To allow it, open System Settings → General → Login Items and enable TouchBarPill." = "Abrir al iniciar sesión sigue desactivado. Para permitirlo, abre Ajustes del Sistema → General → Ítems de inicio y activa TouchBarPill.";
+"Open Login Items Settings" = "Abrir ajustes de Ítems de inicio";
+"OK" = "Aceptar";
 "Opening at login requires macOS 13 or later." = "Abrir al iniciar sesión requiere macOS 13 o posterior.";
 "Could not update the login item: %@" = "No se pudo cambiar el ítem de inicio: %@";
 "Display" = "Pantalla";

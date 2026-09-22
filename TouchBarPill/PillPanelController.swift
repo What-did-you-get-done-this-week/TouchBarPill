@@ -2,11 +2,12 @@ import AppKit
 import QuartzCore
 
 enum PillMetrics {
-    /// Collapsed notch tab. Width stays 132. Height grows a little so the
-    /// concave ears at the screen edge have room above the label.
-    static let collapsedSize = NSSize(width: 132, height: 40)
-    static let notchEarRadius: CGFloat = 14
-    static let notchBottomRadius: CGFloat = 13
+    /// Collapsed notch tab. Width stays 132. Height is 80% of the previous
+    /// 40-pt notch so the tab sits shorter on the screen edge. Ear and bottom
+    /// radii scale with that height so the silhouette stays the same.
+    static let collapsedSize = NSSize(width: 132, height: 32)
+    static let notchEarRadius: CGFloat = 11
+    static let notchBottomRadius: CGFloat = 10
 
     /// Expanded strip: 15% larger than the previous 0.75 scale (0.75 × 1.15).
     static let expandedScale: CGFloat = 0.75 * 1.15
@@ -552,7 +553,7 @@ final class CollapsedChromeView: NSView {
         let textSize = title.size(withAttributes: attributes)
         let origin = NSPoint(
             x: floor((bounds.width - textSize.width) / 2),
-            y: floor((bounds.height - textSize.height) / 2) - 2
+            y: floor((bounds.height - textSize.height) / 2) - 1
         )
         title.draw(at: origin, withAttributes: attributes)
     }

@@ -21,8 +21,13 @@
 "%.2f seconds" = "%.2f seconds";
 "Fixed for this version. Change it without rebuilding: defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5" = "Fixed for this version. Change it without rebuilding: defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5";
 "Open at login" = "Open at login";
-"On by default. macOS may ask you to allow the login item under System Settings → General → Login Items." = "On by default. macOS may ask you to allow the login item under System Settings → General → Login Items.";
-"macOS still needs approval before TouchBarPill can open at login. Allow it under System Settings → General → Login Items." = "macOS still needs approval before TouchBarPill can open at login. Allow it under System Settings → General → Login Items.";
+"Off by default. Turn it on here or from the menu-bar icon. macOS may then ask you to allow TouchBarPill under System Settings → General → Login Items." = "Off by default. Turn it on here or from the menu-bar icon. macOS may then ask you to allow TouchBarPill under System Settings → General → Login Items.";
+"TouchBarPill will open when you log in. Turn this off to remove it from Login Items." = "TouchBarPill will open when you log in. Turn this off to remove it from Login Items.";
+"macOS still needs your OK before TouchBarPill can open at login. Allow it under System Settings → General → Login Items." = "macOS still needs your OK before TouchBarPill can open at login. Allow it under System Settings → General → Login Items.";
+"Allow TouchBarPill in Login Items" = "Allow TouchBarPill in Login Items";
+"Open at Login is still off. To allow it, open System Settings → General → Login Items and enable TouchBarPill." = "Open at Login is still off. To allow it, open System Settings → General → Login Items and enable TouchBarPill.";
+"Open Login Items Settings" = "Open Login Items Settings";
+"OK" = "OK";
 "Opening at login requires macOS 13 or later." = "Opening at login requires macOS 13 or later.";
 "Could not update the login item: %@" = "Could not update the login item: %@";
 "Display" = "Display";
