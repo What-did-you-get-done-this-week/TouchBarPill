@@ -15,6 +15,9 @@
 "Focus" = "Foco";
 "Focus Goal" = "Meta de foco";
 "Reset Focus" = "Reiniciar foco";
+"Start Focus" = "Iniciar foco";
+"Pause Focus" = "Pausar foco";
+"Cinema mode (force hide)" = "Modo cine (forzar ocultar)";
 "Goal: Off" = "Meta: Desactivada";
 "Goal: 25 min" = "Meta: 25 min";
 "Goal: 50 min" = "Meta: 50 min";

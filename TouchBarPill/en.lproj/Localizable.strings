@@ -15,6 +15,9 @@
 "Focus" = "Focus";
 "Focus Goal" = "Focus Goal";
 "Reset Focus" = "Reset Focus";
+"Start Focus" = "Start Focus";
+"Pause Focus" = "Pause Focus";
+"Cinema mode (force hide)" = "Cinema mode (force hide)";
 "Goal: Off" = "Goal: Off";
 "Goal: 25 min" = "Goal: 25 min";
 "Goal: 50 min" = "Goal: 50 min";

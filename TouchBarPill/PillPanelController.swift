@@ -81,9 +81,12 @@ final class PillPanelController: NSObject {
     private var pendingFocusClick: DispatchWorkItem?
     private var volumeFlashItem: DispatchWorkItem?
     private var scrollMonitor: Any?
+    private var localScrollMonitor: Any?
     private var lastScrollStamp: TimeInterval = -1
     /// Hover-expand waits until this time so a volume scroll is not swallowed.
     private var volumeHoldUntil = Date.distantPast
+    /// Big readout stays up until this time. Cinema must not hide it early.
+    private var volumeHUDUntil = Date.distantPast
     private var chromeGeneration = 0
     /// Fullscreen: notch draws nothing, but the wide edge pad still receives hits.
     private var fullscreenConcealed = false
@@ -153,11 +156,22 @@ final class PillPanelController: NSObject {
         scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
             self?.handleGlobalScroll(event)
         }
+        // Events that hit this panel never reach the global monitor.
+        // Side tabs are thin; this catches the wheel even when the view misses it.
+        localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
+            guard let self else { return event }
+            guard self.panel.isVisible, !self.expanded, self.scrollHit() else { return event }
+            self.scrollCollapsed(event)
+            return nil
+        }
     }
 
     deinit {
         if let scrollMonitor {
             NSEvent.removeMonitor(scrollMonitor)
+        }
+        if let localScrollMonitor {
+            NSEvent.removeMonitor(localScrollMonitor)
         }
         NotificationCenter.default.removeObserver(self)
     }
@@ -189,8 +203,14 @@ final class PillPanelController: NSObject {
         expandItem = nil
         discreetItem?.cancel()
         discreetItem = nil
+        volumeFlashItem?.cancel()
+        volumeFlashItem = nil
+        volumeHUDUntil = .distantPast
+        VolumeChrome.extraDepth = 0
+        VolumeChrome.extraSpan = 0
         expanded = false
         hovering = false
+        root.setVolumeReadout(percent: nil, muted: false)
         root.apply(mirror: mirror, expanded: false)
         panel.alphaValue = 1
         panel.orderOut(nil)
@@ -261,8 +281,14 @@ final class PillPanelController: NSObject {
     /// resting the pointer still feels immediate. Default ~0.09s (snappier).
     private func scheduleExpand() {
         expandItem?.cancel()
+        guard pendingFocusClick == nil else { return }
+        guard Date() >= volumeHoldUntil else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self, !self.expanded, !self.dragging, self.hovering else { return }
+            guard self.pendingFocusClick == nil else { return }
+            guard Date() >= self.volumeHoldUntil else { return }
+            // A press owns the notch (focus click or drag). Do not open under it.
+            if (NSEvent.pressedMouseButtons & 1) != 0 { return }
             self.setExpanded(true)
         }
         expandItem = work
@@ -290,23 +316,31 @@ final class PillPanelController: NSObject {
 
     /// Click on the collapsed notch toggles the focus timer. It does not expand.
     /// Hover (after a short delay) still expands the Touch Bar stream.
+    /// A click that started collapsed still counts if hover opened the strip
+    /// during the double-click wait — that race was dropping right-edge clicks.
     private func clickCollapsed() {
-        guard !expanded else { return }
+        guard !dragging else { return }
         expandItem?.cancel()
         expandItem = nil
-        discreetItem?.cancel()
-        discreetItem = nil
-        fullscreenHideItem?.cancel()
-        fullscreenHideItem = nil
-        // Reveal if fullscreen-concealed so the timer label is readable.
-        if fullscreenConcealed {
-            setFullscreenConcealed(false, animated: false)
+        let keepExpanded = expanded
+        if !keepExpanded {
+            discreetItem?.cancel()
+            discreetItem = nil
+            fullscreenHideItem?.cancel()
+            fullscreenHideItem = nil
+            // Reveal if fullscreen-concealed so the timer label is readable.
+            if fullscreenConcealed {
+                setFullscreenConcealed(false, animated: false)
+            }
+            setOpacity(1, animated: false)
         }
-        setOpacity(1, animated: false)
         FocusSession.shared.toggleFromClick()
         root.refreshFocusChrome()
-        // Stay collapsed; hover continues to own expand.
-        refreshChromeOpacity(animated: true)
+        panel.contentView?.needsDisplay = true
+        if !keepExpanded {
+            // Stay collapsed; hover continues to own expand.
+            refreshChromeOpacity(animated: true)
+        }
     }
 
     /// Double-click collapsed notch: toggle system mute (does not expand).
@@ -321,8 +355,8 @@ final class PillPanelController: NSObject {
         }
         setOpacity(1, animated: false)
         let muted = SystemVolume.toggleMute()
-        flashVolume(muted ? L("Muted") : volumePercentLabel())
-        refreshChromeOpacity(animated: true)
+        let percent = Int(((SystemVolume.volume() ?? 0) * 100).rounded())
+        flashVolume(percent: percent, muted: muted)
     }
 
     /// Scroll over the collapsed notch, or the revealed fullscreen hit pad.
@@ -341,78 +375,123 @@ final class PillPanelController: NSObject {
         }
     }
 
+    /// Notch plus a little inward slop. Side edges need this: the visual tab is
+    /// only ~32pt deep, and a wheel event often lands just inside that.
+    private func scrollFrame() -> NSRect {
+        var frame = panel.frame
+        let slop: CGFloat = PillPlacement.edge.isVerticalEdge ? 22 : 10
+        switch PillPlacement.edge {
+        case .leftMid:
+            frame.size.width += slop
+        case .rightMid:
+            frame.origin.x -= slop
+            frame.size.width += slop
+        case .topCenter:
+            frame.origin.y -= slop
+            frame.size.height += slop
+        case .bottomCenter:
+            frame.size.height += slop
+        }
+        return frame
+    }
+
     private func scrollHit() -> Bool {
-        let mouse = NSEvent.mouseLocation
-        guard panel.frame.contains(mouse) else { return false }
-        let inWindow = panel.convertPoint(fromScreen: mouse)
-        let local = root.convert(inWindow, from: nil)
-        return root.hitShapeContains(local)
+        guard panel.isVisible, !expanded else { return false }
+        return scrollFrame().contains(NSEvent.mouseLocation)
     }
 
     private func scrollCollapsed(_ event: NSEvent) {
         guard !expanded else { return }
         if event.timestamp == lastScrollStamp { return }
         lastScrollStamp = event.timestamp
+        var dx = event.scrollingDeltaX
         var dy = event.scrollingDeltaY
-        if event.isDirectionInvertedFromDevice { dy = -dy }
-        let minDelta: CGFloat = event.hasPreciseScrollingDeltas ? 0.6 : 0.01
-        guard abs(dy) >= minDelta else { return }
-        // Positive dy = scroll up = volume up. One wheel click is two system steps.
+        if event.isDirectionInvertedFromDevice {
+            dx = -dx
+            dy = -dy
+        }
+        // Vertical wheel, horizontal scrub, and Option+scroll all count.
+        // The larger axis wins so a side tab still hears a sideways two-finger scrub.
+        let dominant = abs(dy) >= abs(dx) ? dy : dx
+        let minDelta: CGFloat = event.hasPreciseScrollingDeltas ? 0.35 : 0.01
+        guard abs(dominant) >= minDelta else { return }
+        // Positive = volume up. One wheel click is two system steps.
         let steps: Float
         if event.hasPreciseScrollingDeltas {
-            steps = Float(dy) / 8.0
+            steps = Float(dominant) / 8.0
         } else {
-            steps = dy > 0 ? 2 : -2
+            steps = dominant > 0 ? 2 : -2
         }
-        guard abs(steps) > 0.08 else { return }
+        guard abs(steps) > 0.04 else { return }
         noteVolumeGesture()
         guard let volume = SystemVolume.adjust(by: steps * SystemVolume.step) else { return }
-        if fullscreenConcealed || FullscreenWatcher.shared.isFullscreen {
-            setFullscreenConcealed(false, animated: false)
-        }
-        discreetItem?.cancel()
-        discreetItem = nil
-        fullscreenHideItem?.cancel()
-        fullscreenHideItem = nil
-        setOpacity(1, animated: false)
-        flashVolume(volumePercentLabel(volume))
+        let percent = Int((volume * 100).rounded())
+        flashVolume(percent: percent, muted: SystemVolume.isMuted())
     }
 
     /// Keep the strip collapsed while the wheel is moving volume.
     private func noteVolumeGesture() {
-        volumeHoldUntil = Date().addingTimeInterval(0.55)
+        volumeHoldUntil = Date().addingTimeInterval(0.9)
         expandItem?.cancel()
         expandItem = nil
         pendingFocusClick?.cancel()
         pendingFocusClick = nil
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.expanded, !self.dragging else { return }
-            guard Date() >= self.volumeHoldUntil else { return }
-            if FullscreenWatcher.shared.isFullscreen && !self.pointerInsidePanel() {
-                self.concealForFullscreen(immediate: false)
-                return
-            }
-            guard self.hovering else { return }
-            self.scheduleExpand()
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55, execute: work)
     }
 
-    private func volumePercentLabel(_ volume: Float? = nil) -> String {
-        let v = volume ?? SystemVolume.volume() ?? 0
-        return "\(Int((v * 100).rounded()))%"
-    }
-
-    private func flashVolume(_ text: String) {
+    /// Large % (or 🔇) for ~0.8s. Grows the notch so the figure is readable on a 32pt tab.
+    private func flashVolume(percent: Int, muted: Bool) {
         volumeFlashItem?.cancel()
-        root.setVolumeFlash(text)
+        // Mark the HUD first so un-conceal does not immediately hide it again.
+        volumeHUDUntil = Date().addingTimeInterval(0.85)
+        discreetItem?.cancel()
+        discreetItem = nil
+        fullscreenHideItem?.cancel()
+        fullscreenHideItem = nil
+        if fullscreenConcealed {
+            setFullscreenConcealed(false, animated: false)
+        }
+        setOpacity(1, animated: false)
+        setVolumeHUD(active: true)
+        root.setVolumeReadout(percent: percent, muted: muted)
         let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.volumeFlashItem = nil
-            self.root.setVolumeFlash(nil)
+            self?.endVolumeHUD()
         }
         volumeFlashItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.05, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.85, execute: work)
+    }
+
+    private func endVolumeHUD() {
+        volumeFlashItem = nil
+        volumeHUDUntil = .distantPast
+        setVolumeHUD(active: false)
+        root.setVolumeReadout(percent: nil, muted: false)
+        guard !expanded, !dragging else { return }
+        if FullscreenWatcher.shared.isFullscreen && !pointerInsidePanel() {
+            concealForFullscreen(immediate: false)
+            return
+        }
+        refreshChromeOpacity(animated: true)
+        if hovering {
+            scheduleExpand()
+        }
+    }
+
+    private func setVolumeHUD(active: Bool) {
+        let depth: CGFloat = active ? 36 : 0
+        let span: CGFloat = active ? 72 : 0
+        guard VolumeChrome.extraDepth != depth || VolumeChrome.extraSpan != span else { return }
+        VolumeChrome.extraDepth = depth
+        VolumeChrome.extraSpan = span
+        guard !expanded, !dragging, panel.isVisible, let screen = DisplayList.resolved() else { return }
+        panel.setFrame(collapsedFrame(on: screen), display: true)
+        root.needsLayout = true
+        root.layoutSubtreeIfNeeded()
+        root.updateTrackingAreas()
+        updatePanelShadow()
+    }
+
+    private var volumeHUDActive: Bool {
+        VolumeChrome.isActive || Date() < volumeHUDUntil
     }
 
     private func pointerExited() {
@@ -512,6 +591,9 @@ final class PillPanelController: NSObject {
 
     @objc private func focusChanged() {
         root.refreshFocusChrome()
+        if !expanded {
+            panel.displayIfNeeded()
+        }
     }
 
     @objc private func fullscreenChanged() {
@@ -564,6 +646,9 @@ final class PillPanelController: NSObject {
         fullscreenHideItem?.cancel()
         fullscreenHideItem = nil
         guard FullscreenWatcher.shared.isFullscreen, panel.isVisible else { return }
+        if volumeHUDActive {
+            return
+        }
         if PillPlacement.pinExpanded && expanded { return }
         if expanded || dragging { return }
         if pointerInsidePanel() {
@@ -681,6 +766,12 @@ final class PillPanelController: NSObject {
     }
 
     private func refreshChromeOpacity(animated: Bool) {
+        updatePanelShadow()
+        if volumeHUDActive {
+            if fullscreenConcealed { setFullscreenConcealed(false, animated: false) }
+            setOpacity(1, animated: false)
+            return
+        }
         if fullscreenConcealed {
             root.chromeSuppressed = !expanded
             panel.hasShadow = expanded
@@ -716,6 +807,18 @@ final class PillPanelController: NSObject {
         }
         discreetItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + PillPlacement.idleDelay, execute: work)
+    }
+
+    /// Side tabs sit on the wallpaper. The window shadow becomes a light hairline
+    /// along the inward curve, so the notch reads as a floating pill. Top and
+    /// bottom keep the soft shadow. Cinema conceal has no shadow either.
+    private func updatePanelShadow() {
+        let sideCollapsed = !expanded && PillPlacement.edge.isVerticalEdge
+        let concealed = fullscreenConcealed && !expanded
+        panel.hasShadow = !sideCollapsed && !concealed
+        if !panel.hasShadow {
+            panel.invalidateShadow()
+        }
     }
 
     private func setOpacity(_ alpha: CGFloat, animated: Bool) {
@@ -851,6 +954,9 @@ final class PillRootView: NSView {
     private let fallback = FallbackView(frame: .zero)
     private var tracking: NSTrackingArea?
     private(set) var showsExpandedShape = false
+    /// Time-based double-click. Non-activating panels sometimes leave clickCount at 1.
+    private var lastClickUp = Date.distantPast
+    private var lastClickPoint = NSPoint.zero
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -891,9 +997,12 @@ final class PillRootView: NSView {
         return false
     }
 
-    func setVolumeFlash(_ text: String?) {
-        chrome.volumeFlash = text
+    func setVolumeReadout(percent: Int?, muted: Bool) {
+        chrome.volumePercent = percent
+        chrome.volumeMuted = muted
+        chrome.volumeFlash = percent.map { muted ? "🔇" : "\($0)%" }
         chrome.refreshLabel()
+        needsDisplay = true
     }
 
     func apply(mirror: DFRMirror, expanded: Bool) {
@@ -1029,7 +1138,9 @@ final class PillRootView: NSView {
             case .leftMid, .rightMid:
                 delta = dy
             }
-            if abs(delta) > 3 {
+            // 3pt was eating real clicks on the side edges, where the drag
+            // axis is vertical and a press always jitters a few points.
+            if abs(delta) > 10 {
                 moved = true
                 switch edge {
                 case .topCenter, .bottomCenter:
@@ -1040,10 +1151,21 @@ final class PillRootView: NSView {
             }
         }
         if moved {
+            lastClickUp = .distantPast
             onDragEnd?()
-        } else if upClickCount >= 2 {
+            return
+        }
+        let now = Date()
+        let gap = now.timeIntervalSince(lastClickUp)
+        let travel = hypot(NSEvent.mouseLocation.x - lastClickPoint.x, NSEvent.mouseLocation.y - lastClickPoint.y)
+        let systemDouble = upClickCount >= 2
+        let timedDouble = gap < NSEvent.doubleClickInterval && gap > 0.02 && travel < 12 && lastClickUp != .distantPast
+        if systemDouble || timedDouble {
+            lastClickUp = .distantPast
             onDoubleClick?()
         } else {
+            lastClickUp = now
+            lastClickPoint = NSEvent.mouseLocation
             onClick?()
         }
     }
@@ -1077,6 +1199,7 @@ final class PillRootView: NSView {
     private func updateChrome() {
         guard let layer else { return }
         layer.backgroundColor = NSColor.clear.cgColor
+        layer.shadowOpacity = 0
         if showsExpandedShape {
             layer.masksToBounds = true
             layer.cornerCurve = .continuous
@@ -1084,9 +1207,11 @@ final class PillRootView: NSView {
             layer.borderWidth = 1
             layer.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
         } else {
+            // No hairline. A side tab with a stroke reads as a floating window.
             layer.masksToBounds = false
             layer.cornerRadius = 0
             layer.borderWidth = 0
+            layer.borderColor = nil
         }
         needsDisplay = true
     }
@@ -1240,6 +1365,9 @@ enum PillShape {
 final class CollapsedChromeView: NSView {
     var edge: PillEdge = .topCenter
     var volumeFlash: String?
+    /// Nil hides the readout. Zero is a real level.
+    var volumePercent: Int?
+    var volumeMuted = false
 
     override var isOpaque: Bool { false }
 
@@ -1250,7 +1378,10 @@ final class CollapsedChromeView: NSView {
     override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
 
     override func accessibilityLabel() -> String? {
-        isHidden ? nil : (volumeFlash ?? FocusSession.shared.notchLabel)
+        if isHidden { return nil }
+        if volumeMuted { return L("Muted") }
+        if let volumeFlash { return volumeFlash }
+        return FocusSession.shared.notchLabel
     }
 
     func refreshLabel() {
@@ -1258,30 +1389,81 @@ final class CollapsedChromeView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let session = FocusSession.shared
-        let emphasis = volumeFlash != nil
-        let title = (volumeFlash ?? session.notchLabel) as NSString
-        let font = Self.labelFont(emphasis: emphasis)
-        let alpha: CGFloat = emphasis ? 1 : session.labelAlpha
-        var attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: NSColor.white.withAlphaComponent(alpha),
-            .kern: emphasis ? -0.2 : Self.tracking,
-        ]
-        if emphasis {
-            let shadow = NSShadow()
-            shadow.shadowColor = NSColor.black.withAlphaComponent(0.85)
-            shadow.shadowBlurRadius = 3
-            shadow.shadowOffset = NSSize(width: 0, height: -1)
-            attributes[.shadow] = shadow
+        if volumePercent != nil {
+            drawVolumeHero()
+            return
         }
-        let textSize = title.size(withAttributes: attributes)
+        drawNotchLabel()
+    }
 
+    /// Large percent or 🔇. The panel grows while this is up so it is not a tiny flash.
+    private func drawVolumeHero() {
+        let percent = volumePercent ?? 0
+        let hero = (volumeMuted ? "🔇" : "\(percent)%") as NSString
+        let size = (volumeMuted ? 34 : 32) * PillPlacement.size.scale
+        let font = Self.roundedFont(size: size, weight: .bold)
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.9)
+        shadow.shadowBlurRadius = 6
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white,
+            .kern: -0.4,
+            .shadow: shadow,
+        ]
+        let textSize = hero.size(withAttributes: attributes)
+        if !volumeMuted, let icon = Self.speakerImage(pointSize: size * 0.72) {
+            let iconSize = icon.size
+            // Drawn as an image, then the percent. Packaged below as a row.
+            drawHeroRow(icon: icon, iconSize: iconSize, text: hero, textSize: textSize, attributes: attributes)
+            return
+        }
+        drawCentered(hero, size: textSize, attributes: attributes)
+    }
+
+    private func drawHeroRow(
+        icon: NSImage,
+        iconSize: NSSize,
+        text: NSString,
+        textSize: NSSize,
+        attributes: [NSAttributedString.Key: Any]
+    ) {
+        let gap: CGFloat = 6
+        let row = NSSize(width: iconSize.width + gap + textSize.width, height: max(iconSize.height, textSize.height))
         if edge.isVerticalEdge {
             NSGraphicsContext.saveGraphicsState()
             let transform = NSAffineTransform()
-            // Draw upright into a sideways slot: rotate so the baseline runs
-            // along the bezel. Optical nudge keeps the rounded face centered.
+            if edge.attachesLeft {
+                transform.translateX(by: bounds.midX - row.height / 2, yBy: bounds.midY + row.width / 2)
+                transform.rotate(byDegrees: -90)
+            } else {
+                transform.translateX(by: bounds.midX + row.height / 2, yBy: bounds.midY - row.width / 2)
+                transform.rotate(byDegrees: 90)
+            }
+            transform.concat()
+            let iconY = (row.height - iconSize.height) / 2
+            icon.draw(in: NSRect(x: 0, y: iconY, width: iconSize.width, height: iconSize.height))
+            text.draw(at: NSPoint(x: iconSize.width + gap, y: (row.height - textSize.height) / 2), withAttributes: attributes)
+            NSGraphicsContext.restoreGraphicsState()
+        } else {
+            let origin = NSPoint(
+                x: floor((bounds.width - row.width) / 2),
+                y: floor((bounds.height - row.height) / 2) - 0.5
+            )
+            let iconY = origin.y + (row.height - iconSize.height) / 2
+            icon.draw(in: NSRect(x: origin.x, y: iconY, width: iconSize.width, height: iconSize.height))
+            text.draw(
+                at: NSPoint(x: origin.x + iconSize.width + gap, y: origin.y + (row.height - textSize.height) / 2),
+                withAttributes: attributes
+            )
+        }
+    }
+
+    private func drawCentered(_ title: NSString, size textSize: NSSize, attributes: [NSAttributedString.Key: Any]) {
+        if edge.isVerticalEdge {
+            NSGraphicsContext.saveGraphicsState()
+            let transform = NSAffineTransform()
             if edge.attachesLeft {
                 transform.translateX(by: bounds.midX - textSize.height / 2 - 0.5, yBy: bounds.midY + textSize.width / 2)
                 transform.rotate(byDegrees: -90)
@@ -1293,7 +1475,6 @@ final class CollapsedChromeView: NSView {
             title.draw(at: .zero, withAttributes: attributes)
             NSGraphicsContext.restoreGraphicsState()
         } else {
-            // Optical vertical center: rounded faces sit a hair high, so nudge down.
             let origin = NSPoint(
                 x: floor((bounds.width - textSize.width) / 2),
                 y: floor((bounds.height - textSize.height) / 2) - 0.5
@@ -1302,14 +1483,79 @@ final class CollapsedChromeView: NSView {
         }
     }
 
-    /// Same premium idle face for the timer. Volume flash is larger and heavier.
-    private static func labelFont(emphasis: Bool) -> NSFont {
-        let size = (emphasis ? 18 : 11.5) * PillPlacement.size.scale
-        let base = NSFont.systemFont(ofSize: size, weight: emphasis ? .bold : .medium)
+    private func drawNotchLabel() {
+        let session = FocusSession.shared
+        let title = session.notchLabel as NSString
+        let font = Self.labelFont()
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white.withAlphaComponent(session.labelAlpha),
+            .kern: Self.tracking,
+        ]
+        let textSize = title.size(withAttributes: attributes)
+        let showPlay = session.phase == .idle
+        if showPlay {
+            drawIdleLabel(title: title, textSize: textSize, attributes: attributes)
+            return
+        }
+        drawCentered(title, size: textSize, attributes: attributes)
+    }
+
+    /// Small ▶ only while idle, so a first click has something to aim at.
+    private func drawIdleLabel(title: NSString, textSize: NSSize, attributes: [NSAttributedString.Key: Any]) {
+        let playFont = Self.roundedFont(size: 8 * PillPlacement.size.scale, weight: .semibold)
+        let playAttrs: [NSAttributedString.Key: Any] = [
+            .font: playFont,
+            .foregroundColor: NSColor.white.withAlphaComponent(0.55),
+        ]
+        let play = "▶" as NSString
+        let playSize = play.size(withAttributes: playAttrs)
+        let gap: CGFloat = 4
+        let row = NSSize(width: playSize.width + gap + textSize.width, height: max(playSize.height, textSize.height))
+        if edge.isVerticalEdge {
+            NSGraphicsContext.saveGraphicsState()
+            let transform = NSAffineTransform()
+            if edge.attachesLeft {
+                transform.translateX(by: bounds.midX - row.height / 2, yBy: bounds.midY + row.width / 2)
+                transform.rotate(byDegrees: -90)
+            } else {
+                transform.translateX(by: bounds.midX + row.height / 2, yBy: bounds.midY - row.width / 2)
+                transform.rotate(byDegrees: 90)
+            }
+            transform.concat()
+            play.draw(at: NSPoint(x: 0, y: (row.height - playSize.height) / 2), withAttributes: playAttrs)
+            title.draw(at: NSPoint(x: playSize.width + gap, y: (row.height - textSize.height) / 2), withAttributes: attributes)
+            NSGraphicsContext.restoreGraphicsState()
+        } else {
+            let origin = NSPoint(
+                x: floor((bounds.width - row.width) / 2),
+                y: floor((bounds.height - row.height) / 2) - 0.5
+            )
+            play.draw(at: NSPoint(x: origin.x, y: origin.y + (row.height - playSize.height) / 2 + 0.5), withAttributes: playAttrs)
+            title.draw(at: NSPoint(x: origin.x + playSize.width + gap, y: origin.y), withAttributes: attributes)
+        }
+    }
+
+    /// Same premium idle face for the timer.
+    private static func labelFont() -> NSFont {
+        roundedFont(size: 11.5 * PillPlacement.size.scale, weight: .medium)
+    }
+
+    private static func roundedFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
+        let base = NSFont.systemFont(ofSize: size, weight: weight)
         if let rounded = base.fontDescriptor.withDesign(.rounded) {
             return NSFont(descriptor: rounded, size: size) ?? base
         }
         return base
+    }
+
+    private static func speakerImage(pointSize: CGFloat) -> NSImage? {
+        let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .bold)
+            .applying(NSImage.SymbolConfiguration(hierarchicalColor: .white))
+        guard let image = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) else { return nil }
+        image.isTemplate = false
+        return image
     }
 
     private static let tracking: CGFloat = -0.35

@@ -35,12 +35,14 @@ enum NotchTheme: String, CaseIterable {
     var fillColor: NSColor {
         switch self {
         case .black:
-            return NSColor(calibratedWhite: 0.04, alpha: 0.97)
+            // Opaque. A 0.97 fill antialiases into a light rim on the wallpaper,
+            // which on a side tab reads as a floating window outline.
+            return NSColor(calibratedWhite: 0.04, alpha: 1)
         case .graphite:
-            return NSColor(calibratedWhite: 0.16, alpha: 0.97)
+            return NSColor(calibratedWhite: 0.16, alpha: 1)
         case .softAccent:
             // Deep blue — tasteful tint, still dark enough for white labels.
-            return NSColor(calibratedRed: 0.10, green: 0.14, blue: 0.24, alpha: 0.97)
+            return NSColor(calibratedRed: 0.10, green: 0.14, blue: 0.24, alpha: 1)
         }
     }
 }
@@ -90,6 +92,16 @@ enum HitZoneWidth: String, CaseIterable {
     }
 }
 
+/// Extra size while the volume readout is on the notch. Zero the rest of the time.
+/// The panel controller owns the lifetime; layout only reads it.
+enum VolumeChrome {
+    /// Added to the free-edge depth (32 → about 68) so a large % fits.
+    static var extraDepth: CGFloat = 0
+    /// Added to the long axis so “100%” and the mute mark are not clipped.
+    static var extraSpan: CGFloat = 0
+    static var isActive: Bool { extraDepth > 0 || extraSpan > 0 }
+}
+
 /// Persisted placement, pin, and notch-chrome settings.
 /// Launch never writes these. Missing keys mean: top center, not pinned,
 /// discreet fade at 52% opacity (always on), black theme, medium size.
@@ -111,6 +123,7 @@ enum PillPlacement {
     static let hitZoneKey = "HitZoneWidth"
     static let revealDelayKey = "RevealDelay"
     static let fullscreenHideDelayKey = "FullscreenHideDelay"
+    static let cinemaModeKey = "CinemaMode"
 
     static let defaultOpacity = 0.52
 
@@ -241,6 +254,13 @@ enum PillPlacement {
         return min(max(raw, 0.05), 3)
     }
 
+    /// Manual override when window-frame detection cannot see a player.
+    /// Off by default. The status menu toggles it. Does not grant any permission.
+    static var cinemaMode: Bool {
+        get { UserDefaults.standard.bool(forKey: cinemaModeKey) }
+        set { UserDefaults.standard.set(newValue, forKey: cinemaModeKey) }
+    }
+
     static func storeEdge(_ edge: PillEdge) {
         self.edge = edge
         offset = 0
@@ -310,17 +330,32 @@ enum DisplayList {
         return min(max(y, minY), maxY)
     }
 
+    /// How far a side tab tucks past the bezel so the flat edge cannot leave a seam.
+    static let bezelOverhang: CGFloat = 3
+
+    /// Extra inward hit pad on left/right so scroll and click land on a thin tab.
+    static let sideHitPad: CGFloat = 14
+
     /// Visual collapsed notch size (theme/size prefs). Side edges swap axes.
+    /// Volume HUD adds depth and span while the big readout is on screen.
     static func visualCollapsedSize(for edge: PillEdge = PillPlacement.edge) -> NSSize {
         let scale = PillPlacement.size.scale
         let base = NSSize(
-            width: PillMetrics.collapsedSize.width * scale,
-            height: PillMetrics.collapsedSize.height * scale
+            width: (PillMetrics.collapsedSize.width + VolumeChrome.extraSpan) * scale,
+            height: (PillMetrics.collapsedSize.height + VolumeChrome.extraDepth) * scale
         )
         if edge.isVerticalEdge {
             return NSSize(width: base.height, height: base.width)
         }
         return base
+    }
+
+    /// Transparent inward pad. Side tabs always keep a little pad so the wheel
+    /// hits. Cinema uses the wide pad on every edge.
+    static func interactionPad(for edge: PillEdge, immersive: Bool) -> CGFloat {
+        let cinema: CGFloat = immersive ? PillPlacement.hitZone.pad : 0
+        let side: CGFloat = edge.isVerticalEdge ? sideHitPad : 0
+        return max(cinema, side)
     }
 
     /// Panel size including fullscreen hit-zone pad when immersive.
@@ -329,8 +364,8 @@ enum DisplayList {
         immersive: Bool = FullscreenWatcher.shared.isFullscreen
     ) -> NSSize {
         let visual = visualCollapsedSize(for: edge)
-        guard immersive else { return visual }
-        let pad = PillPlacement.hitZone.pad
+        let pad = interactionPad(for: edge, immersive: immersive)
+        guard pad > 0 else { return visual }
         switch edge {
         case .topCenter, .bottomCenter:
             return NSSize(width: visual.width, height: visual.height + pad)
@@ -366,10 +401,10 @@ enum DisplayList {
             return NSPoint(x: x, y: frame.minY)
         case .leftMid:
             let y = clampY(frame.midY - size.height / 2 + offset, height: size.height, on: screen)
-            return NSPoint(x: frame.minX, y: y)
+            return NSPoint(x: frame.minX - bezelOverhang, y: y)
         case .rightMid:
             let y = clampY(frame.midY - size.height / 2 + offset, height: size.height, on: screen)
-            return NSPoint(x: frame.maxX - size.width, y: y)
+            return NSPoint(x: frame.maxX - size.width + bezelOverhang, y: y)
         }
     }
 

@@ -12,7 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let positionMenu = NSMenu()
     private let themeMenu = NSMenu()
     private let sizeMenu = NSMenu()
+    private var focusToggleItem: NSMenuItem!
     private var resetFocusItem: NSMenuItem!
+    private var cinemaItem: NSMenuItem!
     private var didTeardown = false
     private var mirror: DFRMirror!
     private var pill: PillPanelController!
@@ -54,7 +56,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem.title = LaunchAtLogin.menuTitle()
         loginItem.state = LaunchAtLogin.isOn ? .on : .off
         pinItem.state = PillPlacement.pinExpanded ? .on : .off
+        switch FocusSession.shared.phase {
+        case .running:
+            focusToggleItem.title = L("Pause Focus")
+        case .idle, .paused:
+            focusToggleItem.title = L("Start Focus")
+        }
         resetFocusItem.isEnabled = FocusSession.shared.phase != .idle
+        cinemaItem.state = PillPlacement.cinemaMode ? .on : .off
         syncDisplayItem()
         rebuildDisplayMenu()
         rebuildPositionMenu()
@@ -101,9 +110,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        focusToggleItem = NSMenuItem(title: L("Start Focus"), action: #selector(toggleFocus), keyEquivalent: "")
+        focusToggleItem.target = self
+        menu.addItem(focusToggleItem)
+
         resetFocusItem = NSMenuItem(title: L("Reset Focus"), action: #selector(resetFocus), keyEquivalent: "")
         resetFocusItem.target = self
         menu.addItem(resetFocusItem)
+
+        cinemaItem = NSMenuItem(title: L("Cinema mode (force hide)"), action: #selector(toggleCinema), keyEquivalent: "")
+        cinemaItem.target = self
+        menu.addItem(cinemaItem)
 
         menu.addItem(.separator())
 
@@ -173,8 +190,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         PillPlacement.postChange()
     }
 
+    @objc private func toggleFocus() {
+        switch FocusSession.shared.phase {
+        case .idle:
+            FocusSession.shared.start()
+        case .running:
+            FocusSession.shared.pause()
+        case .paused:
+            FocusSession.shared.resume()
+        }
+    }
+
     @objc private func resetFocus() {
         FocusSession.shared.reset()
+    }
+
+    @objc private func toggleCinema() {
+        PillPlacement.cinemaMode.toggle()
+        FullscreenWatcher.shared.refresh()
     }
 
     @objc private func chooseTheme(_ sender: NSMenuItem) {
@@ -341,8 +374,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DiscreetMode: always-on opacity \(String(format: "%.2f", Double(PillPlacement.discreetOpacity))) idle \(String(format: "%.2f", PillPlacement.idleDelay))
         NotchTheme: \(PillPlacement.theme.rawValue) size \(PillPlacement.size.rawValue) hitZone \(PillPlacement.hitZone.rawValue)
         RevealDelay: \(String(format: "%.2f", PillPlacement.revealDelay)) FullscreenHideDelay: \(String(format: "%.2f", PillPlacement.fullscreenHideDelay))
-        Focus: phase \(String(describing: FocusSession.shared.phase)) elapsed \(String(format: "%.0f", FocusSession.shared.displayElapsed))s
-        Fullscreen: \(FullscreenWatcher.shared.isFullscreen ? "yes" : "no")
+        Focus: phase \(String(describing: FocusSession.shared.phase)) elapsed \(String(format: "%.0f", FocusSession.shared.displayElapsed))s label \(FocusSession.shared.notchLabel)
+        Fullscreen: \(FullscreenWatcher.shared.diagnosticToken)
+        CinemaMode: \(PillPlacement.cinemaMode ? "on" : "off")
+        CinemaCoverage: \(String(format: "%.0f%%", Double(FullscreenWatcher.shared.frontCoverage * 100)))
         ExpandedPlacement: follows \(PillPlacement.edge.rawValue) on the chosen display
         \(LaunchAtLogin.diagnosticLine())
         \(mirror.diagnosticSummary())
