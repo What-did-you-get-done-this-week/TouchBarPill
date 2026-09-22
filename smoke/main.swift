@@ -98,10 +98,13 @@ enum ZoneSmoke {
 
         let raise = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 10, precise: true, invertedFromDevice: false)
         let lower = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: -10, precise: true, invertedFromDevice: false)
-        check((raise ?? 0) < 0, "positive wheel delta now lowers volume")
-        check((lower ?? 0) > 0, "negative wheel delta now raises volume")
-        let natural = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 10, precise: true, invertedFromDevice: true)
-        check((natural ?? 0) > 0, "natural-scroll inversion still applies before the 0.4.5 flip")
+        check((raise ?? 0) > 0, "fingers up (positive device delta) raises volume")
+        check((lower ?? 0) < 0, "fingers down (negative device delta) lowers volume")
+        // Natural scrolling reports the opposite of the fingers, then we undo it.
+        let naturalUp = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: -10, precise: true, invertedFromDevice: true)
+        let naturalDown = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 10, precise: true, invertedFromDevice: true)
+        check((naturalUp ?? 0) > 0, "natural-scroll fingers up raises volume")
+        check((naturalDown ?? 0) < 0, "natural-scroll fingers down lowers volume")
         check(ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 0.1, precise: true, invertedFromDevice: false) == nil, "tiny precise delta is ignored")
 
         check(ZonePolicy.wantsCrossedSpeaker(muted: true, level: 0.4), "mute crosses the speaker")

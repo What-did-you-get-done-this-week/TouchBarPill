@@ -56,8 +56,9 @@ enum ZonePolicy {
         return level <= 0.005
     }
 
-    /// Volume-wing scroll steps. Positive raises output.
-    /// 0.4.5 flips the 0.4.4 sign: the direction that used to raise now lowers.
+    /// Volume-wing scroll steps. Positive raises output toward 100%.
+    /// Natural trackpad scrolling is inverted from the fingers; undo that so
+    /// fingers up raises volume and fingers down lowers it.
     static func volumeScrollSteps(
         deltaX: CGFloat,
         deltaY: CGFloat,
@@ -79,7 +80,8 @@ enum ZonePolicy {
         } else {
             raw = dominant > 0 ? 2 : -2
         }
-        let steps = -raw
+        // 0.4.6: keep the finger direction. 0.4.5 negated this and lowered on fingers up.
+        let steps = raw
         guard abs(steps) > 0.04 else { return nil }
         return steps
     }
