@@ -1,24 +1,32 @@
 import AppKit
 import CoreGraphics
 
-/// Where the collapsed notch sits along the chosen display.
-/// `leading` is the left edge, `trailing` the right edge. An offset, in
-/// points, shifts it from that anchor. A free drag is stored as `center`
-/// plus the distance from the display's midpoint.
-enum PillAnchor: String {
-    case leading
-    case center
-    case trailing
+/// Which screen edge the collapsed notch attaches to.
+/// Default is the top center. Side placements sit at the vertical middle.
+enum PillEdge: String, CaseIterable {
+    case topCenter
+    case bottomCenter
+    case leftMid
+    case rightMid
+
+    var attachesTop: Bool { self == .topCenter }
+    var attachesBottom: Bool { self == .bottomCenter }
+    var attachesLeft: Bool { self == .leftMid }
+    var attachesRight: Bool { self == .rightMid }
+    var isHorizontalEdge: Bool { attachesTop || attachesBottom }
+    var isVerticalEdge: Bool { attachesLeft || attachesRight }
 }
 
 /// Persisted placement, pin, and discreet-mode settings.
-/// Launch never writes these. Missing keys mean: center, not pinned,
+/// Launch never writes these. Missing keys mean: top center, not pinned,
 /// discreet mode on at 52% opacity.
 enum PillPlacement {
     static let didChange = Notification.Name("PillPlacementDidChange")
 
     static let displayIDKey = "PreferredDisplayID"
-    static let anchorKey = "PillAnchor"
+    static let edgeKey = "PillEdge"
+    /// Legacy horizontal-slot key from 0.3.0 (leading / center / trailing).
+    static let legacyAnchorKey = "PillAnchor"
     static let offsetKey = "PillOffset"
     static let pinKey = "PinExpanded"
     static let discreetKey = "DiscreetMode"
@@ -31,15 +39,24 @@ enum PillPlacement {
         NotificationCenter.default.post(name: didChange, object: nil)
     }
 
-    static var anchor: PillAnchor {
+    static var edge: PillEdge {
         get {
-            let raw = UserDefaults.standard.string(forKey: anchorKey) ?? PillAnchor.center.rawValue
-            return PillAnchor(rawValue: raw) ?? .center
+            if let raw = UserDefaults.standard.string(forKey: edgeKey),
+               let edge = PillEdge(rawValue: raw) {
+                return edge
+            }
+            // 0.3.0 stored Left / Center / Right along the top edge only.
+            // Those presets become top-center; a free drag offset is kept.
+            if UserDefaults.standard.string(forKey: legacyAnchorKey) != nil {
+                return .topCenter
+            }
+            return .topCenter
         }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: anchorKey) }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: edgeKey) }
     }
 
-    /// Points added after the anchor. Zero is a pure Left / Center / Right slot.
+    /// Points added after the edge’s natural mid. Zero is the pure preset.
+    /// On top/bottom edges this is horizontal. On left/right it is vertical.
     static var offset: CGFloat {
         get {
             guard UserDefaults.standard.object(forKey: offsetKey) != nil else { return 0 }
@@ -108,8 +125,8 @@ enum PillPlacement {
         return min(max(raw, 0.3), 8)
     }
 
-    static func storeAnchor(_ anchor: PillAnchor) {
-        self.anchor = anchor
+    static func storeEdge(_ edge: PillEdge) {
+        self.edge = edge
         offset = 0
     }
 }
@@ -163,33 +180,60 @@ enum DisplayList {
         return NSScreen.screens.first(where: isBuiltIn) ?? NSScreen.main ?? NSScreen.screens.first
     }
 
-    static func clamp(_ x: CGFloat, width: CGFloat, on screen: NSScreen) -> CGFloat {
+    static func clampX(_ x: CGFloat, width: CGFloat, on screen: NSScreen) -> CGFloat {
         let minX = screen.frame.minX
         let maxX = screen.frame.maxX - width
         if maxX <= minX { return minX }
         return min(max(x, minX), maxX)
     }
 
-    static func collapsedOriginX(width: CGFloat, on screen: NSScreen) -> CGFloat {
-        let frame = screen.frame
-        let x: CGFloat
-        switch PillPlacement.anchor {
-        case .leading:
-            x = frame.minX + PillPlacement.offset
-        case .trailing:
-            x = frame.maxX - width - PillPlacement.offset
-        case .center:
-            x = frame.midX - width / 2 + PillPlacement.offset
-        }
-        return clamp(x, width: width, on: screen)
+    static func clampY(_ y: CGFloat, height: CGFloat, on screen: NSScreen) -> CGFloat {
+        let minY = screen.frame.minY
+        let maxY = screen.frame.maxY - height
+        if maxY <= minY { return minY }
+        return min(max(y, minY), maxY)
     }
 
-    /// Remember a dragged X as center + offset so it survives a resolution change
-    /// better than a raw global coordinate, and still clamps onto the display.
-    static func storeFreeX(_ x: CGFloat, width: CGFloat, on screen: NSScreen) {
-        let clamped = clamp(x, width: width, on: screen)
-        let center = clamped + width / 2
-        PillPlacement.anchor = .center
-        PillPlacement.offset = center - screen.frame.midX
+    /// Collapsed notch size. Side edges swap width/height so the ears meet the bezel.
+    static func collapsedSize(for edge: PillEdge = PillPlacement.edge) -> NSSize {
+        let base = PillMetrics.collapsedSize
+        if edge.isVerticalEdge {
+            return NSSize(width: base.height, height: base.width)
+        }
+        return base
+    }
+
+    static func collapsedOrigin(size: NSSize, on screen: NSScreen) -> NSPoint {
+        let frame = screen.frame
+        let offset = PillPlacement.offset
+        switch PillPlacement.edge {
+        case .topCenter:
+            let x = clampX(frame.midX - size.width / 2 + offset, width: size.width, on: screen)
+            return NSPoint(x: x, y: frame.maxY - size.height)
+        case .bottomCenter:
+            let x = clampX(frame.midX - size.width / 2 + offset, width: size.width, on: screen)
+            return NSPoint(x: x, y: frame.minY)
+        case .leftMid:
+            let y = clampY(frame.midY - size.height / 2 + offset, height: size.height, on: screen)
+            return NSPoint(x: frame.minX, y: y)
+        case .rightMid:
+            let y = clampY(frame.midY - size.height / 2 + offset, height: size.height, on: screen)
+            return NSPoint(x: frame.maxX - size.width, y: y)
+        }
+    }
+
+    /// Remember a free drag as an offset from the edge’s mid so it survives a
+    /// resolution change, and still clamps onto the display.
+    static func storeFreeOrigin(_ origin: NSPoint, size: NSSize, on screen: NSScreen) {
+        switch PillPlacement.edge {
+        case .topCenter, .bottomCenter:
+            let clamped = clampX(origin.x, width: size.width, on: screen)
+            let center = clamped + size.width / 2
+            PillPlacement.offset = center - screen.frame.midX
+        case .leftMid, .rightMid:
+            let clamped = clampY(origin.y, height: size.height, on: screen)
+            let center = clamped + size.height / 2
+            PillPlacement.offset = center - screen.frame.midY
+        }
     }
 }

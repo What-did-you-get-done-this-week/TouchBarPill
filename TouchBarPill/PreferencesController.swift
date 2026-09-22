@@ -119,7 +119,7 @@ final class PreferencesController: NSWindowController {
         let heading = NSTextField(labelWithString: "TouchBarPill")
         heading.font = .systemFont(ofSize: 18, weight: .semibold)
 
-        let intro = note(L("A black tab sits flush with the top of the display you choose. Drag it along that edge, or pick Left, Center, or Right. Hover to open the Touch Bar. The expanded strip stays centered on that display. Move away and it folds back, unless it is pinned."))
+        let intro = note(L("A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned."))
         intro.font = .systemFont(ofSize: 12)
         intro.textColor = .secondaryLabelColor
 
@@ -160,13 +160,13 @@ final class PreferencesController: NSWindowController {
         positionPopup.target = self
         positionPopup.action = #selector(positionChanged(_:))
         positionPopup.setAccessibilityLabel(L("Position"))
-        let positionNote = note(L("Drag the collapsed tab along the top edge. Left, Center, and Right park it on that display. The expanded strip stays top-centered on the same display, not under the tab."))
+        let positionNote = note(L("Drag the collapsed notch along its attached edge. Top center, Bottom center, Left mid, and Right mid park it on that display. The expanded strip follows the same edge and stays on screen."))
 
         let pinLabel = sectionLabel(L("Pin expanded"))
         pinSwitch.target = self
         pinSwitch.action = #selector(pinChanged(_:))
         pinSwitch.setAccessibilityLabel(L("Pin expanded"))
-        let pinNote = note(L("When on, the strip stays open until you turn this off. Leaving with the pointer does not collapse it."))
+        let pinNote = note(L("When on, the strip stays open until you unpin it. Leave with the pointer and it stays. Unpin from this switch, the status menu, right-click → Unpin on the strip, or the soft pushpin that appears while hovering a pinned strip."))
 
         let discreetLabel = sectionLabel(L("Discreet mode"))
         discreetSwitch.target = self
@@ -286,23 +286,28 @@ final class PreferencesController: NSWindowController {
             displayPopup.selectItem(withTag: Int(resolvedID))
         }
         if PillPlacement.preferredDisplayIsConnected {
-            displayNote.stringValue = L("The tab and the expanded strip use the top edge of this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns.")
+            displayNote.stringValue = L("The notch and the expanded strip use the edge you choose on this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns.")
         } else {
             displayNote.stringValue = L("That display is unplugged. Showing the built-in display, or the main display, until it is back. The choice is remembered.")
         }
 
         positionPopup.removeAllItems()
-        positionPopup.addItem(withTitle: L("Left"))
-        positionPopup.lastItem?.tag = 0
-        positionPopup.addItem(withTitle: L("Center"))
-        positionPopup.lastItem?.tag = 1
-        positionPopup.addItem(withTitle: L("Right"))
-        positionPopup.lastItem?.tag = 2
+        let edges: [(String, PillEdge, Int)] = [
+            (L("Top center"), .topCenter, 0),
+            (L("Bottom center"), .bottomCenter, 1),
+            (L("Left mid"), .leftMid, 2),
+            (L("Right mid"), .rightMid, 3),
+        ]
+        for (title, _, tag) in edges {
+            positionPopup.addItem(withTitle: title)
+            positionPopup.lastItem?.tag = tag
+        }
         if PillPlacement.isPurePreset {
-            switch PillPlacement.anchor {
-            case .leading: positionPopup.selectItem(withTag: 0)
-            case .center: positionPopup.selectItem(withTag: 1)
-            case .trailing: positionPopup.selectItem(withTag: 2)
+            switch PillPlacement.edge {
+            case .topCenter: positionPopup.selectItem(withTag: 0)
+            case .bottomCenter: positionPopup.selectItem(withTag: 1)
+            case .leftMid: positionPopup.selectItem(withTag: 2)
+            case .rightMid: positionPopup.selectItem(withTag: 3)
             }
         } else {
             positionPopup.addItem(withTitle: L("Custom"))
@@ -337,13 +342,14 @@ final class PreferencesController: NSWindowController {
 
     @objc private func positionChanged(_ sender: NSPopUpButton) {
         guard !suppressUI, let item = sender.selectedItem, item.tag >= 0 else { return }
-        let anchor: PillAnchor
+        let edge: PillEdge
         switch item.tag {
-        case 0: anchor = .leading
-        case 2: anchor = .trailing
-        default: anchor = .center
+        case 1: edge = .bottomCenter
+        case 2: edge = .leftMid
+        case 3: edge = .rightMid
+        default: edge = .topCenter
         }
-        PillPlacement.storeAnchor(anchor)
+        PillPlacement.storeEdge(edge)
         PillPlacement.postChange()
     }
 

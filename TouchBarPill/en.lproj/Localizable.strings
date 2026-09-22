@@ -35,19 +35,24 @@
 "Display %d" = "Display %d";
 "No displays" = "No displays";
 "Position" = "Position";
+"Top center" = "Top center";
+"Bottom center" = "Bottom center";
+"Left mid" = "Left mid";
+"Right mid" = "Right mid";
 "Left" = "Left";
 "Center" = "Center";
 "Right" = "Right";
 "Custom" = "Custom";
 "Pin expanded" = "Pin expanded";
+"Unpin" = "Unpin";
 "Discreet mode" = "Discreet mode";
 "Idle opacity" = "Idle opacity";
 "none" = "none";
-"A black tab sits flush with the top of the display you choose. Drag it along that edge, or pick Left, Center, or Right. Hover to open the Touch Bar. The expanded strip stays centered on that display. Move away and it folds back, unless it is pinned." = "A black tab sits flush with the top of the display you choose. Drag it along that edge, or pick Left, Center, or Right. Hover to open the Touch Bar. The expanded strip stays centered on that display. Move away and it folds back, unless it is pinned.";
-"The tab and the expanded strip use the top edge of this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns." = "The tab and the expanded strip use the top edge of this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns.";
+"A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned." = "A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned.";
+"The notch and the expanded strip use the edge you choose on this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns." = "The notch and the expanded strip use the edge you choose on this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns.";
 "That display is unplugged. Showing the built-in display, or the main display, until it is back. The choice is remembered." = "That display is unplugged. Showing the built-in display, or the main display, until it is back. The choice is remembered.";
-"Drag the collapsed tab along the top edge. Left, Center, and Right park it on that display. The expanded strip stays top-centered on the same display, not under the tab." = "Drag the collapsed tab along the top edge. Left, Center, and Right park it on that display. The expanded strip stays top-centered on the same display, not under the tab.";
-"When on, the strip stays open until you turn this off. Leaving with the pointer does not collapse it." = "When on, the strip stays open until you turn this off. Leaving with the pointer does not collapse it.";
+"Drag the collapsed notch along its attached edge. Top center, Bottom center, Left mid, and Right mid park it on that display. The expanded strip follows the same edge and stays on screen." = "Drag the collapsed notch along its attached edge. Top center, Bottom center, Left mid, and Right mid park it on that display. The expanded strip follows the same edge and stays on screen.";
+"When on, the strip stays open until you unpin it. Leave with the pointer and it stays. Unpin from this switch, the status menu, right-click → Unpin on the strip, or the soft pushpin that appears while hovering a pinned strip." = "When on, the strip stays open until you unpin it. Leave with the pointer and it stays. Unpin from this switch, the status menu, right-click → Unpin on the strip, or the soft pushpin that appears while hovering a pinned strip.";
 "When the tab is collapsed and idle, it fades. Hover or expand brings it back to full opacity. On by default." = "When the tab is collapsed and idle, it fades. Hover or expand brings it back to full opacity. On by default.";
 
 /* Diagnostics */

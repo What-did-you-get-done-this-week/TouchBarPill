@@ -163,14 +163,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         PillPlacement.postChange()
     }
 
-    @objc private func chooseAnchor(_ sender: NSMenuItem) {
-        let anchor: PillAnchor
+    @objc private func chooseEdge(_ sender: NSMenuItem) {
+        let edge: PillEdge
         switch sender.tag {
-        case 0: anchor = .leading
-        case 2: anchor = .trailing
-        default: anchor = .center
+        case 1: edge = .bottomCenter
+        case 2: edge = .leftMid
+        case 3: edge = .rightMid
+        default: edge = .topCenter
         }
-        PillPlacement.storeAnchor(anchor)
+        PillPlacement.storeEdge(edge)
         PillPlacement.postChange()
     }
 
@@ -194,16 +195,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func rebuildPositionMenu() {
         positionMenu.removeAllItems()
-        let specs: [(String, PillAnchor, Int)] = [
-            (L("Left"), .leading, 0),
-            (L("Center"), .center, 1),
-            (L("Right"), .trailing, 2),
+        let specs: [(String, PillEdge, Int)] = [
+            (L("Top center"), .topCenter, 0),
+            (L("Bottom center"), .bottomCenter, 1),
+            (L("Left mid"), .leftMid, 2),
+            (L("Right mid"), .rightMid, 3),
         ]
-        for (title, anchor, tag) in specs {
-            let item = NSMenuItem(title: title, action: #selector(chooseAnchor(_:)), keyEquivalent: "")
+        for (title, edge, tag) in specs {
+            let item = NSMenuItem(title: title, action: #selector(chooseEdge(_:)), keyEquivalent: "")
             item.target = self
             item.tag = tag
-            let selected = PillPlacement.anchor == anchor && PillPlacement.isPurePreset
+            let selected = PillPlacement.edge == edge && PillPlacement.isPurePreset
             item.state = selected ? .on : .off
             positionMenu.addItem(item)
         }
@@ -261,10 +263,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         PillHidden: \(UserDefaults.standard.bool(forKey: "PillHidden"))
         PreferredDisplayID: \(saved)
         ResolvedDisplay: \(resolvedName) id=\(resolvedID) fallback=\(fallback)
-        Anchor: \(PillPlacement.anchor.rawValue) offset \(String(format: "%.1f", Double(PillPlacement.offset)))
+        Edge: \(PillPlacement.edge.rawValue) offset \(String(format: "%.1f", Double(PillPlacement.offset)))
         PinExpanded: \(PillPlacement.pinExpanded)
         DiscreetMode: \(PillPlacement.discreetMode) opacity \(String(format: "%.2f", Double(PillPlacement.discreetOpacity))) idle \(String(format: "%.2f", PillPlacement.idleDelay))
-        ExpandedPlacement: top-center of the chosen display
+        ExpandedPlacement: follows \(PillPlacement.edge.rawValue) on the chosen display
         \(LaunchAtLogin.diagnosticLine())
         \(mirror.diagnosticSummary())
         \(L("Screens:"))

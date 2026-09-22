@@ -26,6 +26,8 @@ enum PillMetrics {
     static let fallbackButtonHeight: CGFloat = 24 * expandedChromeScale
     static let fallbackBodyBottom: CGFloat = 28 * expandedChromeScale
     static let fallbackBodyTrim: CGFloat = 48 * expandedChromeScale
+    static let pinButtonSize: CGFloat = 22
+    static let sideExpandedInset: CGFloat = 10
 
     /// Leave-collapse delay. Hardcoded at 0.4s unless overridden:
     /// `defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5`
@@ -82,26 +84,35 @@ final class PillPanelController: NSObject {
     init(mirror: DFRMirror) {
         self.mirror = mirror
         panel = PillPanel(
-            contentRect: NSRect(origin: .zero, size: PillMetrics.collapsedSize),
+            contentRect: NSRect(origin: .zero, size: DisplayList.collapsedSize()),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        root = PillRootView(frame: NSRect(origin: .zero, size: PillMetrics.collapsedSize))
+        root = PillRootView(frame: NSRect(origin: .zero, size: DisplayList.collapsedSize()))
         super.init()
         configurePanel()
         panel.shapeContains = { [weak root] point in
             guard let root else { return false }
-            return PillShape.path(in: root.bounds, expanded: root.showsExpandedShape).contains(point)
+            return PillShape.path(
+                in: root.bounds,
+                expanded: root.showsExpandedShape,
+                edge: PillPlacement.edge
+            ).contains(point)
         }
         root.onEntered = { [weak self] in self?.pointerEntered() }
         root.onExited = { [weak self] in self?.pointerExited() }
         root.onPress = { [weak self] in self?.pressBegan() }
         root.onClick = { [weak self] in self?.clickCollapsed() }
-        root.onDrag = { [weak self] x in self?.dragCollapsed(toX: x) }
+        root.onDrag = { [weak self] origin in self?.dragCollapsed(to: origin) }
         root.onDragEnd = { [weak self] in self?.finishDrag() }
         root.onRetry = { [weak self] in self?.retry() }
         root.onQuit = { NSApp.terminate(nil) }
+        root.onUnpin = { [weak self] in self?.unpin() }
+        root.pinVisibility = { [weak self] in
+            guard let self else { return false }
+            return self.expanded && self.hovering && PillPlacement.pinExpanded
+        }
         root.streamView.onMouse = { [weak self] event in
             guard let self, self.expanded else { return }
             self.mirror.postMouseEvent(event, in: self.root.streamView)
@@ -141,6 +152,7 @@ final class PillPanelController: NSObject {
         panel.orderFrontRegardless()
         panel.invalidateShadow()
         root.updateTrackingAreas()
+        root.refreshPinChrome()
         if !pinned && panel.frame.contains(NSEvent.mouseLocation) {
             pointerEntered()
         } else {
@@ -196,12 +208,19 @@ final class PillPanelController: NSObject {
         panel.contentView = root
     }
 
+    private func unpin() {
+        guard PillPlacement.pinExpanded else { return }
+        PillPlacement.pinExpanded = false
+        PillPlacement.postChange()
+    }
+
     private func pointerEntered() {
         hovering = true
         collapseItem?.cancel()
         discreetItem?.cancel()
         discreetItem = nil
         setOpacity(1, animated: true)
+        root.refreshPinChrome()
         guard !expanded, !dragging else { return }
         // A short delay lets a press-and-drag park the tab. A plain hover
         // still opens it. The drag loop runs in event-tracking mode, so this
@@ -244,9 +263,11 @@ final class PillPanelController: NSObject {
         // that still lands inside the panel.
         if panel.frame.contains(NSEvent.mouseLocation) {
             hovering = true
+            root.refreshPinChrome()
             return
         }
         hovering = false
+        root.refreshPinChrome()
         guard expanded else {
             refreshChromeOpacity(animated: true)
             return
@@ -277,6 +298,7 @@ final class PillPanelController: NSObject {
         guard let screen = DisplayList.resolved() else { return }
         let target = expand ? expandedFrame(on: screen) : collapsedFrame(on: screen)
         root.apply(mirror: mirror, expanded: expand)
+        root.refreshPinChrome()
         if expand || hovering || dragging {
             discreetItem?.cancel()
             discreetItem = nil
@@ -310,6 +332,7 @@ final class PillPanelController: NSObject {
                 self.hovering = false
                 self.root.apply(mirror: self.mirror, expanded: false)
             }
+            self.root.refreshPinChrome()
             self.refreshChromeOpacity(animated: true)
         }
     }
@@ -349,10 +372,11 @@ final class PillPanelController: NSObject {
         if !PillPlacement.pinExpanded && expanded && !hovering && !panel.frame.contains(NSEvent.mouseLocation) {
             scheduleCollapse()
         }
+        root.refreshPinChrome()
         refreshChromeOpacity(animated: true)
     }
 
-    private func dragCollapsed(toX x: CGFloat) {
+    private func dragCollapsed(to origin: NSPoint) {
         dragging = true
         collapseItem?.cancel()
         discreetItem?.cancel()
@@ -360,7 +384,12 @@ final class PillPanelController: NSObject {
         setOpacity(1, animated: false)
         guard let screen = DisplayList.resolved() else { return }
         var frame = collapsedFrame(on: screen)
-        frame.origin.x = DisplayList.clamp(x, width: frame.width, on: screen)
+        switch PillPlacement.edge {
+        case .topCenter, .bottomCenter:
+            frame.origin.x = DisplayList.clampX(origin.x, width: frame.width, on: screen)
+        case .leftMid, .rightMid:
+            frame.origin.y = DisplayList.clampY(origin.y, height: frame.height, on: screen)
+        }
         panel.setFrame(frame, display: true)
     }
 
@@ -369,7 +398,7 @@ final class PillPanelController: NSObject {
         // The frame is already where the drag left it.
         dragging = false
         guard let screen = DisplayList.resolved() else { return }
-        DisplayList.storeFreeX(panel.frame.origin.x, width: panel.frame.width, on: screen)
+        DisplayList.storeFreeOrigin(panel.frame.origin, size: panel.frame.size, on: screen)
         PillPlacement.postChange()
         if panel.frame.contains(NSEvent.mouseLocation) {
             clickCollapsed()
@@ -433,35 +462,58 @@ final class PillPanelController: NSObject {
     }
 
     private func collapsedFrame(on screen: NSScreen) -> NSRect {
-        let size = PillMetrics.collapsedSize
-        // Flush with the physical top of the chosen display. Horizontal
-        // position is the saved anchor. The notch path's straight edge is
-        // the window's top edge, so there is no menu-bar gap here.
-        let x = DisplayList.collapsedOriginX(width: size.width, on: screen)
-        return NSRect(
-            x: x,
-            y: screen.frame.maxY - size.height,
-            width: size.width,
-            height: size.height
-        )
+        let size = DisplayList.collapsedSize()
+        let origin = DisplayList.collapsedOrigin(size: size, on: screen)
+        return NSRect(origin: origin, size: size)
     }
 
-    /// The expanded strip stays top-centered on the chosen display. It does
-    /// not slide under the notch: a wide Touch Bar parked in a corner would
-    /// clamp into the bezel, and the controls would jump every time the tab
-    /// moves. Collapsing returns the tab to its saved X.
+    /// Expanded strip follows the chosen edge. Top and bottom stay centered on
+    /// that edge. Left and right use a horizontal strip near that side so the
+    /// Touch Bar aspect ratio stays readable, clamped below the menu bar.
     private func expandedFrame(on screen: NSScreen) -> NSRect {
+        let size = expandedSize(on: screen)
+        let frame = screen.frame
+        let visible = screen.visibleFrame
         let gap = topGap(on: screen)
-        if !mirror.hasFrame {
-            let size = NSSize(
-                width: min(PillMetrics.fallbackCardSize.width, screen.frame.width - 48),
-                height: PillMetrics.fallbackCardSize.height
-            )
+
+        switch PillPlacement.edge {
+        case .topCenter:
             return NSRect(
-                x: screen.frame.midX - size.width / 2,
-                y: screen.frame.maxY - size.height - gap,
+                x: frame.midX - size.width / 2,
+                y: frame.maxY - size.height - gap,
                 width: size.width,
                 height: size.height
+            )
+        case .bottomCenter:
+            let y = max(frame.minY, min(visible.minY, frame.maxY - size.height))
+            return NSRect(
+                x: frame.midX - size.width / 2,
+                y: y,
+                width: size.width,
+                height: size.height
+            )
+        case .leftMid:
+            let x = frame.minX + PillMetrics.sideExpandedInset
+            let idealY = frame.midY - size.height / 2
+            let minY = max(frame.minY, visible.minY)
+            let maxY = min(frame.maxY, visible.maxY) - size.height
+            let y = maxY >= minY ? min(max(idealY, minY), maxY) : minY
+            return NSRect(x: x, y: y, width: size.width, height: size.height)
+        case .rightMid:
+            let x = frame.maxX - size.width - PillMetrics.sideExpandedInset
+            let idealY = frame.midY - size.height / 2
+            let minY = max(frame.minY, visible.minY)
+            let maxY = min(frame.maxY, visible.maxY) - size.height
+            let y = maxY >= minY ? min(max(idealY, minY), maxY) : minY
+            return NSRect(x: x, y: y, width: size.width, height: size.height)
+        }
+    }
+
+    private func expandedSize(on screen: NSScreen) -> NSSize {
+        if !mirror.hasFrame {
+            return NSSize(
+                width: min(PillMetrics.fallbackCardSize.width, screen.frame.width - 48),
+                height: PillMetrics.fallbackCardSize.height
             )
         }
 
@@ -475,14 +527,7 @@ final class PillPanelController: NSObject {
             streamWidth = maxWidth - padX * 2
             streamHeight = streamWidth / aspect
         }
-        let width = streamWidth + padX * 2
-        let height = streamHeight + padY * 2
-        return NSRect(
-            x: screen.frame.midX - width / 2,
-            y: screen.frame.maxY - height - gap,
-            width: width,
-            height: height
-        )
+        return NSSize(width: streamWidth + padX * 2, height: streamHeight + padY * 2)
     }
 
     private func displayAspect() -> CGFloat {
@@ -502,14 +547,17 @@ final class PillRootView: NSView {
     var onExited: (() -> Void)?
     var onPress: (() -> Void)?
     var onClick: (() -> Void)?
-    var onDrag: ((CGFloat) -> Void)?
+    var onDrag: ((NSPoint) -> Void)?
     var onDragEnd: (() -> Void)?
     var onRetry: (() -> Void)?
     var onQuit: (() -> Void)?
+    var onUnpin: (() -> Void)?
+    var pinVisibility: (() -> Bool)?
 
     let streamView = TouchBarStreamView(frame: .zero)
     private let chrome = CollapsedChromeView(frame: .zero)
     private let fallback = FallbackView(frame: .zero)
+    private let pinButton = PinButton(frame: .zero)
     private var tracking: NSTrackingArea?
     private(set) var showsExpandedShape = false
 
@@ -521,9 +569,13 @@ final class PillRootView: NSView {
         addSubview(streamView)
         addSubview(chrome)
         addSubview(fallback)
+        addSubview(pinButton)
+        pinButton.isHidden = true
+        pinButton.target = self
+        pinButton.action = #selector(pinClicked(_:))
         fallback.onRetry = { [weak self] in self?.onRetry?() }
         let present: (NSEvent) -> Void = { [weak self] event in
-            self?.presentQuitMenu(with: event)
+            self?.presentContextMenu(with: event)
         }
         streamView.onContextMenu = present
         fallback.onContextMenu = present
@@ -540,6 +592,7 @@ final class PillRootView: NSView {
 
     func apply(mirror: DFRMirror, expanded: Bool) {
         showsExpandedShape = expanded
+        chrome.edge = PillPlacement.edge
         chrome.needsDisplay = true
         fallback.title = mirror.simulatorReady ? L("Touch Bar") : L("Touch Bar unavailable")
         fallback.message = mirror.statusMessage
@@ -551,6 +604,14 @@ final class PillRootView: NSView {
         fallback.alphaValue = fallback.isHidden ? 0 : 1
         needsLayout = true
         updateChrome()
+        refreshPinChrome()
+    }
+
+    func refreshPinChrome() {
+        let show = pinVisibility?() == true
+        pinButton.isHidden = !show
+        pinButton.alphaValue = show ? 1 : 0
+        needsLayout = true
     }
 
     override func layout() {
@@ -560,6 +621,13 @@ final class PillRootView: NSView {
         chrome.frame = bounds
         fallback.frame = bounds.insetBy(dx: PillMetrics.fallbackInset.width, dy: PillMetrics.fallbackInset.height)
         fallback.layoutSubtreeIfNeeded()
+        let pin = PillMetrics.pinButtonSize
+        pinButton.frame = NSRect(
+            x: bounds.maxX - pin - 8,
+            y: bounds.maxY - pin - 6,
+            width: pin,
+            height: pin
+        )
     }
 
     override func updateTrackingAreas() {
@@ -579,12 +647,14 @@ final class PillRootView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
-        guard PillShape.path(in: bounds, expanded: showsExpandedShape).contains(local) else { return nil }
+        guard PillShape.path(in: bounds, expanded: showsExpandedShape, edge: PillPlacement.edge).contains(local) else {
+            return nil
+        }
         return super.hitTest(point)
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let path = PillShape.path(in: bounds, expanded: showsExpandedShape)
+        let path = PillShape.path(in: bounds, expanded: showsExpandedShape, edge: PillPlacement.edge)
         NSColor(calibratedWhite: 0.04, alpha: 0.97).setFill()
         path.fill()
     }
@@ -599,14 +669,14 @@ final class PillRootView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         if event.modifierFlags.contains(.control) {
-            presentQuitMenu(with: event)
+            presentContextMenu(with: event)
             return
         }
         guard !showsExpandedShape else { return }
         trackClickOrDrag()
     }
 
-    /// A small click expands. A horizontal drag parks the collapsed notch
+    /// A small click expands. A drag along the attached edge parks the notch
     /// and does not expand until the pointer is released on top of it.
     private func trackClickOrDrag() {
         guard let window else {
@@ -614,8 +684,9 @@ final class PillRootView: NSView {
             return
         }
         onPress?()
-        let startMouseX = NSEvent.mouseLocation.x
-        let startFrameX = window.frame.origin.x
+        let startMouse = NSEvent.mouseLocation
+        let startOrigin = window.frame.origin
+        let edge = PillPlacement.edge
         var moved = false
         while let next = window.nextEvent(
             matching: [.leftMouseDragged, .leftMouseUp],
@@ -624,10 +695,24 @@ final class PillRootView: NSView {
             dequeue: true
         ) {
             if next.type == .leftMouseUp { break }
-            let dx = NSEvent.mouseLocation.x - startMouseX
-            if abs(dx) > 3 {
+            let mouse = NSEvent.mouseLocation
+            let dx = mouse.x - startMouse.x
+            let dy = mouse.y - startMouse.y
+            let delta: CGFloat
+            switch edge {
+            case .topCenter, .bottomCenter:
+                delta = dx
+            case .leftMid, .rightMid:
+                delta = dy
+            }
+            if abs(delta) > 3 {
                 moved = true
-                onDrag?(startFrameX + dx)
+                switch edge {
+                case .topCenter, .bottomCenter:
+                    onDrag?(NSPoint(x: startOrigin.x + dx, y: startOrigin.y))
+                case .leftMid, .rightMid:
+                    onDrag?(NSPoint(x: startOrigin.x, y: startOrigin.y + dy))
+                }
             }
         }
         if moved {
@@ -638,11 +723,17 @@ final class PillRootView: NSView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        presentQuitMenu(with: event)
+        presentContextMenu(with: event)
     }
 
-    private func presentQuitMenu(with event: NSEvent) {
+    private func presentContextMenu(with event: NSEvent) {
         let menu = NSMenu()
+        if showsExpandedShape && PillPlacement.pinExpanded {
+            let unpin = NSMenuItem(title: L("Unpin"), action: #selector(performUnpin(_:)), keyEquivalent: "")
+            unpin.target = self
+            menu.addItem(unpin)
+            menu.addItem(.separator())
+        }
         let quit = NSMenuItem(title: L("Quit TouchBarPill"), action: #selector(performQuit(_:)), keyEquivalent: "")
         quit.target = self
         menu.addItem(quit)
@@ -651,6 +742,14 @@ final class PillRootView: NSView {
 
     @objc private func performQuit(_ sender: Any?) {
         onQuit?()
+    }
+
+    @objc private func performUnpin(_ sender: Any?) {
+        onUnpin?()
+    }
+
+    @objc private func pinClicked(_ sender: Any?) {
+        onUnpin?()
     }
 
     private func updateChrome() {
@@ -671,19 +770,32 @@ final class PillRootView: NSView {
     }
 }
 
-/// Collapsed: a tab hanging from the screen edge. The top side is straight and
-/// flush with the window top. Each top corner is a concave quarter that sweeps
-/// inward into the vertical side. The bottom corners are ordinary convex rounds.
+/// Collapsed: a tab hanging from the chosen screen edge. The attachment side
+/// is straight and flush. Concave ears meet that edge; the free side is rounded.
 enum PillShape {
-    static func path(in rect: NSRect, expanded: Bool) -> NSBezierPath {
+    static func path(in rect: NSRect, expanded: Bool, edge: PillEdge) -> NSBezierPath {
         if expanded {
             let radius = min(PillMetrics.expandedCornerRadius, rect.height / 2, rect.width / 2)
             return NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
         }
-        return notchTab(in: rect)
+        return notchTab(in: rect, edge: edge)
     }
 
-    static func notchTab(in rect: NSRect) -> NSBezierPath {
+    static func notchTab(in rect: NSRect, edge: PillEdge) -> NSBezierPath {
+        switch edge {
+        case .topCenter:
+            return topNotch(in: rect)
+        case .bottomCenter:
+            return bottomNotch(in: rect)
+        case .leftMid:
+            return leftNotch(in: rect)
+        case .rightMid:
+            return rightNotch(in: rect)
+        }
+    }
+
+    /// Ears at the top edge; rounded free edge at the bottom.
+    private static func topNotch(in rect: NSRect) -> NSBezierPath {
         let ear = min(PillMetrics.notchEarRadius, max(4, rect.height * 0.45), max(4, rect.width / 4))
         let bottom = min(PillMetrics.notchBottomRadius, max(4, rect.height - ear - 2), max(4, rect.width / 2 - ear - 1))
         let path = NSBezierPath()
@@ -723,10 +835,138 @@ enum PillShape {
         path.close()
         return path
     }
+
+    /// Flipped: ears meet the bottom edge.
+    private static func bottomNotch(in rect: NSRect) -> NSBezierPath {
+        let ear = min(PillMetrics.notchEarRadius, max(4, rect.height * 0.45), max(4, rect.width / 4))
+        let tip = min(PillMetrics.notchBottomRadius, max(4, rect.height - ear - 2), max(4, rect.width / 2 - ear - 1))
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: rect.minX, y: rect.minY))
+        path.line(to: NSPoint(x: rect.maxX, y: rect.minY))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.maxX, y: rect.minY + ear),
+            radius: ear,
+            startAngle: -90,
+            endAngle: -180,
+            clockwise: true
+        )
+        path.line(to: NSPoint(x: rect.maxX - ear, y: rect.maxY - tip))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.maxX - ear - tip, y: rect.maxY - tip),
+            radius: tip,
+            startAngle: 0,
+            endAngle: 90,
+            clockwise: false
+        )
+        path.line(to: NSPoint(x: rect.minX + ear + tip, y: rect.maxY))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.minX + ear + tip, y: rect.maxY - tip),
+            radius: tip,
+            startAngle: 90,
+            endAngle: 180,
+            clockwise: false
+        )
+        path.line(to: NSPoint(x: rect.minX + ear, y: rect.minY + ear))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.minX, y: rect.minY + ear),
+            radius: ear,
+            startAngle: 0,
+            endAngle: -90,
+            clockwise: true
+        )
+        path.close()
+        return path
+    }
+
+    /// Ears meet the left bezel; rounded free edge on the right.
+    private static func leftNotch(in rect: NSRect) -> NSBezierPath {
+        let ear = min(PillMetrics.notchEarRadius, max(4, rect.width * 0.45), max(4, rect.height / 4))
+        let tip = min(PillMetrics.notchBottomRadius, max(4, rect.width - ear - 2), max(4, rect.height / 2 - ear - 1))
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: rect.minX, y: rect.maxY))
+        path.line(to: NSPoint(x: rect.minX, y: rect.minY))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.minX + ear, y: rect.minY),
+            radius: ear,
+            startAngle: 180,
+            endAngle: 270,
+            clockwise: false
+        )
+        path.line(to: NSPoint(x: rect.maxX - tip, y: rect.minY + ear))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.maxX - tip, y: rect.minY + ear + tip),
+            radius: tip,
+            startAngle: -90,
+            endAngle: 0,
+            clockwise: false
+        )
+        path.line(to: NSPoint(x: rect.maxX, y: rect.maxY - ear - tip))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.maxX - tip, y: rect.maxY - ear - tip),
+            radius: tip,
+            startAngle: 0,
+            endAngle: 90,
+            clockwise: false
+        )
+        path.line(to: NSPoint(x: rect.minX + ear, y: rect.maxY - ear))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.minX + ear, y: rect.maxY),
+            radius: ear,
+            startAngle: -90,
+            endAngle: -180,
+            clockwise: true
+        )
+        path.close()
+        return path
+    }
+
+    /// Ears meet the right bezel; rounded free edge on the left.
+    private static func rightNotch(in rect: NSRect) -> NSBezierPath {
+        let ear = min(PillMetrics.notchEarRadius, max(4, rect.width * 0.45), max(4, rect.height / 4))
+        let tip = min(PillMetrics.notchBottomRadius, max(4, rect.width - ear - 2), max(4, rect.height / 2 - ear - 1))
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: rect.maxX, y: rect.maxY))
+        path.line(to: NSPoint(x: rect.maxX, y: rect.minY))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.maxX - ear, y: rect.minY),
+            radius: ear,
+            startAngle: 0,
+            endAngle: -90,
+            clockwise: true
+        )
+        path.line(to: NSPoint(x: rect.minX + tip, y: rect.minY + ear))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.minX + tip, y: rect.minY + ear + tip),
+            radius: tip,
+            startAngle: -90,
+            endAngle: -180,
+            clockwise: true
+        )
+        path.line(to: NSPoint(x: rect.minX, y: rect.maxY - ear - tip))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.minX + tip, y: rect.maxY - ear - tip),
+            radius: tip,
+            startAngle: 180,
+            endAngle: 90,
+            clockwise: true
+        )
+        path.line(to: NSPoint(x: rect.maxX - ear, y: rect.maxY - ear))
+        path.appendArc(
+            withCenter: NSPoint(x: rect.maxX - ear, y: rect.maxY),
+            radius: ear,
+            startAngle: -90,
+            endAngle: 0,
+            clockwise: false
+        )
+        path.close()
+        return path
+    }
 }
 
-/// Centered “Touch Bar” label only. Draws nothing interactive; hits fall through.
+/// Centered “Touch Bar” label. Rotates 90° on left/right edges.
 final class CollapsedChromeView: NSView {
+    var edge: PillEdge = .topCenter
+
     override var isOpaque: Bool { false }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -744,11 +984,78 @@ final class CollapsedChromeView: NSView {
             .foregroundColor: NSColor.white.withAlphaComponent(0.94),
         ]
         let textSize = title.size(withAttributes: attributes)
-        let origin = NSPoint(
-            x: floor((bounds.width - textSize.width) / 2),
-            y: floor((bounds.height - textSize.height) / 2) - 1
-        )
-        title.draw(at: origin, withAttributes: attributes)
+
+        if edge.isVerticalEdge {
+            NSGraphicsContext.saveGraphicsState()
+            let transform = NSAffineTransform()
+            // Draw upright into a sideways slot: rotate so the baseline runs
+            // along the bezel.
+            if edge.attachesLeft {
+                transform.translateX(by: bounds.midX - textSize.height / 2 - 1, yBy: bounds.midY + textSize.width / 2)
+                transform.rotate(byDegrees: -90)
+            } else {
+                transform.translateX(by: bounds.midX + textSize.height / 2 + 1, yBy: bounds.midY - textSize.width / 2)
+                transform.rotate(byDegrees: 90)
+            }
+            transform.concat()
+            title.draw(at: .zero, withAttributes: attributes)
+            NSGraphicsContext.restoreGraphicsState()
+        } else {
+            let origin = NSPoint(
+                x: floor((bounds.width - textSize.width) / 2),
+                y: floor((bounds.height - textSize.height) / 2) - 1
+            )
+            title.draw(at: origin, withAttributes: attributes)
+        }
+    }
+}
+
+/// Soft pushpin shown only while the expanded strip is pinned and hovered.
+final class PinButton: NSButton {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        isBordered = false
+        setButtonType(.momentaryChange)
+        imagePosition = .imageOnly
+        image = Self.pinImage()
+        image?.isTemplate = false
+        toolTip = L("Unpin")
+        setAccessibilityLabel(L("Unpin"))
+        alphaValue = 0.42
+        focusRingType = .none
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not used")
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    private static func pinImage() -> NSImage {
+        let size = NSSize(width: 14, height: 14)
+        return NSImage(size: size, flipped: false) { _ in
+            let color = NSColor.white.withAlphaComponent(0.42)
+            color.setStroke()
+            let head = NSBezierPath(ovalIn: NSRect(x: 4.5, y: 7.5, width: 5, height: 5))
+            head.lineWidth = 1
+            head.stroke()
+            let shaft = NSBezierPath()
+            shaft.move(to: NSPoint(x: 7, y: 7.5))
+            shaft.line(to: NSPoint(x: 7, y: 1.5))
+            shaft.lineWidth = 1.2
+            shaft.lineCapStyle = .round
+            shaft.stroke()
+            let cross = NSBezierPath()
+            cross.move(to: NSPoint(x: 3.5, y: 9.5))
+            cross.line(to: NSPoint(x: 10.5, y: 9.5))
+            cross.lineWidth = 1
+            cross.lineCapStyle = .round
+            cross.stroke()
+            return true
+        }
     }
 }
 

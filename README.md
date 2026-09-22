@@ -1,6 +1,6 @@
 # TouchBarPill
 
-TouchBarPill is a menu-bar utility for a Mac whose Touch Bar still receives taps but no longer draws. Collapsed, it is a black tab flush with the top edge of the display you choose. Hover the tab and it expands into the live adaptive Touch Bar, top-centered on that same display. Move the pointer away and, after a short delay, it collapses, unless you pin it open. After a short idle it fades. Menus follow the system language (English and Spanish). Opening at login stays off until you turn it on.
+TouchBarPill is a menu-bar utility for a Mac whose Touch Bar still receives taps but no longer draws. Collapsed, it is a black notch on the edge you choose (top center by default, or bottom center, left mid, or right mid). Hover it and it expands into the live adaptive Touch Bar along that same edge. Move the pointer away and, after a short delay, it collapses, unless you pin it open. After a short idle it fades. Menus follow the system language (English and Spanish). Opening at login stays off until you turn it on.
 
 The picture is not a screenshot. Frames come from the same private Touch Bar simulator interface that open-source simulators use, and clicks are posted back into that simulator so the real buttons fire. The physical OLED does not have to work. macOS still renders the bar on the host, which is why Touché can mirror it.
 
@@ -12,10 +12,10 @@ Touché proves the adaptive bar can be mirrored, including system prompts (Allow
 
 TouchBarPill uses that same class of private API, and changes the window:
 
-- Collapsed, it is a notch-style tab about 132×32 points, with its top edge flush against the chosen display. The top corners are concave ears; the bottom corners are rounded. The only label is “Touch Bar”. Drag it along that top edge, or choose Left, Center, or Right. The choice is remembered. Hover still opens it; the expand waits a fraction of a second so a drag can start.
-- Expanded, the strip is 15% larger than the previous three-quarter mirror (scale 0.75 × 1.15), width, height, padding, and fallback type kept in proportion. It stays top-centered on the chosen display. It does not follow the notch’s X, so parking the tab in a corner does not shove the controls into the bezel.
+- Collapsed, it is a notch-style tab about 132×32 points on the chosen edge. Top and bottom attach flush with concave ears on that edge; left and right rotate the same shape onto the bezel. The only label is “Touch Bar”. Drag it along the attached edge, or choose Top center, Bottom center, Left mid, or Right mid. The choice is remembered. Hover still opens it; the expand waits a fraction of a second so a drag can start.
+- Expanded, the strip is 15% larger than the previous three-quarter mirror (scale 0.75 × 1.15), width, height, padding, and fallback type kept in proportion. It follows the chosen edge (top/bottom centered, or near the left/right bezel) and stays clamped on screen.
 - Hover, or a click on the tab, expands it into a wide strip.
-- The pointer leaving the strip collapses it after 0.4 seconds. Pin expanded keeps it open until you unpin it.
+- The pointer leaving the strip collapses it after 0.4 seconds. Pin expanded keeps it open until you unpin it from the status menu, Preferences, right-click → Unpin on the strip, or the soft hover pushpin.
 - When the tab is collapsed and idle for about 1.2 seconds, discreet mode (on by default) fades it to about 52% opacity. Hover or expand restores full opacity.
 - There is no Dock icon. A status item has Show/Hide, Display, Position, Pin expanded, Discreet mode, Preferences, Open at Login, Copy Diagnostics, and Quit. The menu-bar icon stays.
 
@@ -32,6 +32,13 @@ A dead OLED is not a problem. A missing framework is.
 ## Build and run
 
 Open `TouchBarPill.xcodeproj` and press Run.
+
+If `xcodebuild` is unavailable (Command Line Tools only), use:
+
+```sh
+./build-cli.sh
+open build/TouchBarPill.app
+```
 
 Or from the repo root:
 
@@ -67,15 +74,15 @@ killall TouchBarPill
 
 ## What you should see
 
-1. A black tab on the top edge of the chosen display (by default the built-in display, or the main display). Its top edge meets the screen edge, with concave ears at the top corners and rounded bottom corners. Collapsed, it shows only the words Touch Bar.
-2. Moving the pointer onto it grows a black strip about 15% larger than the previous three-quarter bar, proportions kept. The strip is centered on that display’s top edge, even if the tab itself sits to the left or right.
+1. A black notch on the chosen edge of the chosen display (default: top center on the built-in display, or the main display). Ears meet that edge; the free side is rounded. Collapsed, it shows only the words Touch Bar.
+2. Moving the pointer onto it grows a black strip about 15% larger than the previous three-quarter bar, proportions kept. The strip follows the same edge and stays clamped on that display.
 3. The strip shows the same adaptive Touch Bar the frontmost app would draw: Control Strip, function keys, Allow / Don’t Allow, and so on.
 4. Clicking a button in the strip activates that button. Try a Control Strip control, or a button in an app that puts real actions on the Touch Bar.
-5. Leaving the strip collapses it after about 0.4 seconds. Moving back onto it cancels the collapse. Pin expanded skips that collapse until you turn the pin off.
+5. Leaving the strip collapses it after about 0.4 seconds. Moving back onto it cancels the collapse. Pin expanded skips that collapse until you unpin it (status menu, Preferences, right-click → Unpin, or the soft hover pushpin).
 6. After the collapsed tab sits idle for about 1.2 seconds, it fades. Hovering or expanding brings it back to full opacity. Discreet mode can be turned off.
-7. Click the status item for Show/Hide, Display, Position, Pin expanded, Discreet mode, Open at Login, and Quit TouchBarPill. Right-click (or Control-click) the tab for Quit as well. Hide is remembered. The status-item icon is still the capsule with three dots.
+7. Click the status item for Show/Hide, Display, Position, Pin expanded, Discreet mode, Open at Login, and Quit TouchBarPill. Right-click (or Control-click) the expanded strip for Unpin (when pinned) and Quit; the collapsed tab still offers Quit. Hide is remembered. The status-item icon is still the capsule with three dots.
 
-The tab stays on the display you pick. It does not follow the pointer onto another screen. If that display is unplugged, the tab moves to the built-in display, or the main display, and returns when the saved display is back. Drag the collapsed tab horizontally to park it; it stays flush with the top and cannot leave the display. On a notched display the collapsed tab still meets the top edge; the expanded strip sits just below the menu bar so the notch does not cover the controls.
+The notch stays on the display you pick. It does not follow the pointer onto another screen. If that display is unplugged, it moves to the built-in display, or the main display, and returns when the saved display is back. Drag the collapsed notch along its attached edge; it cannot leave the display. Top/bottom placements stay flush with that edge; left/right sit mid-height on the bezel. On a notched MacBook display, top placement still meets the physical top; the expanded strip sits just below the menu bar so the camera notch does not cover the controls.
 
 The panel is non-activating and borderless, joins every Space, and is marked `fullScreenAuxiliary` so it can remain visible over full-screen apps. Its window level is one step above status items, which keeps it under pop-up menus. Clicks must not activate TouchBarPill. If they did, the adaptive bar would switch to this app’s empty Touch Bar.
 

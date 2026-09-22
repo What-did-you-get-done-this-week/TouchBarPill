@@ -35,19 +35,24 @@
 "Display %d" = "Pantalla %d";
 "No displays" = "No hay pantallas";
 "Position" = "Posición";
+"Top center" = "Centro superior";
+"Bottom center" = "Centro inferior";
+"Left mid" = "Medio izquierda";
+"Right mid" = "Medio derecha";
 "Left" = "Izquierda";
 "Center" = "Centro";
 "Right" = "Derecha";
 "Custom" = "Personalizada";
 "Pin expanded" = "Fijar expandida";
+"Unpin" = "Desfijar";
 "Discreet mode" = "Modo discreto";
 "Idle opacity" = "Opacidad en reposo";
 "none" = "ninguna";
-"A black tab sits flush with the top of the display you choose. Drag it along that edge, or pick Left, Center, or Right. Hover to open the Touch Bar. The expanded strip stays centered on that display. Move away and it folds back, unless it is pinned." = "Una pestaña negra queda pegada al borde superior de la pantalla que elijas. Arrástrala por ese borde, o elige Izquierda, Centro o Derecha. Pasa el puntero para abrir la Touch Bar. La tira expandida se queda centrada en esa pantalla. Al salir se pliega, salvo que esté fijada.";
-"The tab and the expanded strip use the top edge of this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns." = "La pestaña y la tira usan el borde superior de esta pantalla. Si la desconectas, TouchBarPill usa la integrada, o la principal, hasta que vuelva.";
+"A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned." = "Una muesca negra se pega al borde que elijas — centro superior por omisión, o inferior, medio izquierda o medio derecha. Arrástrala por ese borde. Pasa el puntero para abrir la Touch Bar. La tira expandida sigue el mismo borde. Al salir se pliega, salvo que esté fijada.";
+"The notch and the expanded strip use the edge you choose on this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns." = "La muesca y la tira usan el borde que elijas en esta pantalla. Si la desconectas, TouchBarPill usa la integrada, o la principal, hasta que vuelva.";
 "That display is unplugged. Showing the built-in display, or the main display, until it is back. The choice is remembered." = "Esa pantalla está desconectada. Se muestra la integrada, o la principal, hasta que vuelva. La elección se recuerda.";
-"Drag the collapsed tab along the top edge. Left, Center, and Right park it on that display. The expanded strip stays top-centered on the same display, not under the tab." = "Arrastra la pestaña plegada por el borde superior. Izquierda, Centro y Derecha la colocan en esa pantalla. La tira expandida se queda centrada arriba en la misma pantalla, no debajo de la pestaña.";
-"When on, the strip stays open until you turn this off. Leaving with the pointer does not collapse it." = "Activado, la tira sigue abierta hasta que lo quites. Salir con el puntero no la contrae.";
+"Drag the collapsed notch along its attached edge. Top center, Bottom center, Left mid, and Right mid park it on that display. The expanded strip follows the same edge and stays on screen." = "Arrastra la muesca plegada por el borde al que está pegada. Centro superior, Centro inferior, Medio izquierda y Medio derecha la colocan en esa pantalla. La tira expandida sigue el mismo borde y se queda en pantalla.";
+"When on, the strip stays open until you unpin it. Leave with the pointer and it stays. Unpin from this switch, the status menu, right-click → Unpin on the strip, or the soft pushpin that appears while hovering a pinned strip." = "Activado, la tira sigue abierta hasta que la desfijas. Salir con el puntero no la contrae. Desfíjala con este interruptor, el menú de estado, clic derecho → Desfijar en la tira, o el chincheta suave que aparece al pasar el puntero por una tira fijada.";
 "When the tab is collapsed and idle, it fades. Hover or expand brings it back to full opacity. On by default." = "Plegada y en reposo, la pestaña se atenúa. Al pasar el puntero o al expandir vuelve a opaca. Activado por omisión.";
 
 /* Diagnósticos */
