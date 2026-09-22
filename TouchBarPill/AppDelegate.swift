@@ -5,18 +5,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var showItem: NSMenuItem!
     private var loginItem: NSMenuItem!
     private var pinItem: NSMenuItem!
-    private var discreetItem: NSMenuItem!
+    private var statusMenu: NSMenu!
+    private var displayItem: NSMenuItem!
+    private var positionItem: NSMenuItem!
     private let displayMenu = NSMenu()
     private let positionMenu = NSMenu()
-    private let focusGoalMenu = NSMenu()
     private let themeMenu = NSMenu()
     private let sizeMenu = NSMenu()
-    private let hitZoneMenu = NSMenu()
     private var resetFocusItem: NSMenuItem!
     private var didTeardown = false
     private var mirror: DFRMirror!
     private var pill: PillPanelController!
-    private let preferences = PreferencesController()
+    /// Created on first use, which is during launch — not before NSApp.run.
+    private lazy var preferences = PreferencesController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -53,14 +54,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem.title = LaunchAtLogin.menuTitle()
         loginItem.state = LaunchAtLogin.isOn ? .on : .off
         pinItem.state = PillPlacement.pinExpanded ? .on : .off
-        discreetItem.state = PillPlacement.discreetMode ? .on : .off
         resetFocusItem.isEnabled = FocusSession.shared.phase != .idle
+        syncDisplayItem()
         rebuildDisplayMenu()
         rebuildPositionMenu()
-        rebuildFocusGoalMenu()
         rebuildThemeMenu()
         rebuildSizeMenu()
-        rebuildHitZoneMenu()
     }
 
     private func buildStatusItem() {
@@ -71,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let menu = NSMenu()
         menu.delegate = self
+        statusMenu = menu
 
         showItem = NSMenuItem(title: L("Hide Touch Bar"), action: #selector(togglePill), keyEquivalent: "h")
         showItem.keyEquivalentModifierMask = [.command, .shift]
@@ -79,21 +79,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let displayItem = NSMenuItem(title: L("Display"), action: nil, keyEquivalent: "")
+        displayItem = NSMenuItem(title: L("Display"), action: nil, keyEquivalent: "")
         displayItem.submenu = displayMenu
-        menu.addItem(displayItem)
+        displayItem.target = self
 
-        let positionItem = NSMenuItem(title: L("Position"), action: nil, keyEquivalent: "")
+        positionItem = NSMenuItem(title: L("Position"), action: nil, keyEquivalent: "")
         positionItem.submenu = positionMenu
         menu.addItem(positionItem)
 
         pinItem = NSMenuItem(title: L("Pin expanded"), action: #selector(togglePin), keyEquivalent: "")
         pinItem.target = self
         menu.addItem(pinItem)
-
-        discreetItem = NSMenuItem(title: L("Discreet mode"), action: #selector(toggleDiscreet), keyEquivalent: "")
-        discreetItem.target = self
-        menu.addItem(discreetItem)
 
         let themeItem = NSMenuItem(title: L("Notch theme"), action: nil, keyEquivalent: "")
         themeItem.submenu = themeMenu
@@ -103,23 +99,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sizeItem.submenu = sizeMenu
         menu.addItem(sizeItem)
 
-        let hitZoneItem = NSMenuItem(title: L("Hit zone"), action: nil, keyEquivalent: "")
-        hitZoneItem.submenu = hitZoneMenu
-        menu.addItem(hitZoneItem)
-
         menu.addItem(.separator())
 
         resetFocusItem = NSMenuItem(title: L("Reset Focus"), action: #selector(resetFocus), keyEquivalent: "")
         resetFocusItem.target = self
         menu.addItem(resetFocusItem)
 
-        let focusGoalItem = NSMenuItem(title: L("Focus Goal"), action: nil, keyEquivalent: "")
-        focusGoalItem.submenu = focusGoalMenu
-        menu.addItem(focusGoalItem)
-
         menu.addItem(.separator())
 
-        let preferencesItem = NSMenuItem(title: L("Preferences…"), action: #selector(showPreferences), keyEquivalent: ",")
+        let preferencesItem = NSMenuItem(title: L("Preferences…"), action: #selector(showPreferences(_:)), keyEquivalent: ",")
         preferencesItem.target = self
         menu.addItem(preferencesItem)
 
@@ -176,7 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc private func showPreferences() {
+    @objc private func showPreferences(_ sender: Any?) {
         preferences.show()
     }
 
@@ -185,18 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         PillPlacement.postChange()
     }
 
-    @objc private func toggleDiscreet() {
-        PillPlacement.discreetMode.toggle()
-        PillPlacement.postChange()
-    }
-
     @objc private func resetFocus() {
         FocusSession.shared.reset()
-    }
-
-    @objc private func chooseFocusGoal(_ sender: NSMenuItem) {
-        guard let goal = FocusGoal(rawValue: sender.tag) else { return }
-        FocusSession.shared.goal = goal
     }
 
     @objc private func chooseTheme(_ sender: NSMenuItem) {
@@ -208,12 +186,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func chooseSize(_ sender: NSMenuItem) {
         guard NotchSize.allCases.indices.contains(sender.tag) else { return }
         PillPlacement.size = NotchSize.allCases[sender.tag]
-        PillPlacement.postChange()
-    }
-
-    @objc private func chooseHitZone(_ sender: NSMenuItem) {
-        guard HitZoneWidth.allCases.indices.contains(sender.tag) else { return }
-        PillPlacement.hitZone = HitZoneWidth.allCases[sender.tag]
         PillPlacement.postChange()
     }
 
@@ -236,7 +208,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         PillPlacement.postChange()
     }
 
+    /// Display exists only when more than one screen is attached.
+    private func syncDisplayItem() {
+        let show = NSScreen.screens.count > 1
+        let listed = displayItem.menu != nil
+        if show && !listed {
+            let index = statusMenu.index(of: positionItem)
+            statusMenu.insertItem(displayItem, at: max(0, index))
+        } else if !show && listed {
+            statusMenu.removeItem(displayItem)
+        }
+    }
+
     private func rebuildDisplayMenu() {
+        guard NSScreen.screens.count > 1 else {
+            displayMenu.removeAllItems()
+            return
+        }
         displayMenu.removeAllItems()
         let resolvedID = DisplayList.resolved().map { DisplayList.id(of: $0) }
         for entry in DisplayList.entries() {
@@ -272,18 +260,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func rebuildFocusGoalMenu() {
-        focusGoalMenu.removeAllItems()
-        let current = FocusSession.shared.goal
-        for goal in FocusGoal.allCases {
-            let item = NSMenuItem(title: goal.shortTitle, action: #selector(chooseFocusGoal(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = goal.rawValue
-            item.state = goal == current ? .on : .off
-            focusGoalMenu.addItem(item)
-        }
-    }
-
     private func rebuildThemeMenu() {
         themeMenu.removeAllItems()
         let current = PillPlacement.theme
@@ -305,18 +281,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.tag = index
             item.state = size == current ? .on : .off
             sizeMenu.addItem(item)
-        }
-    }
-
-    private func rebuildHitZoneMenu() {
-        hitZoneMenu.removeAllItems()
-        let current = PillPlacement.hitZone
-        for (index, zone) in HitZoneWidth.allCases.enumerated() {
-            let item = NSMenuItem(title: zone.menuTitle, action: #selector(chooseHitZone(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = index
-            item.state = zone == current ? .on : .off
-            hitZoneMenu.addItem(item)
         }
     }
 
@@ -374,10 +338,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ResolvedDisplay: \(resolvedName) id=\(resolvedID) fallback=\(fallback)
         Edge: \(PillPlacement.edge.rawValue) offset \(String(format: "%.1f", Double(PillPlacement.offset)))
         PinExpanded: \(PillPlacement.pinExpanded)
-        DiscreetMode: \(PillPlacement.discreetMode) opacity \(String(format: "%.2f", Double(PillPlacement.discreetOpacity))) idle \(String(format: "%.2f", PillPlacement.idleDelay))
+        DiscreetMode: always-on opacity \(String(format: "%.2f", Double(PillPlacement.discreetOpacity))) idle \(String(format: "%.2f", PillPlacement.idleDelay))
         NotchTheme: \(PillPlacement.theme.rawValue) size \(PillPlacement.size.rawValue) hitZone \(PillPlacement.hitZone.rawValue)
         RevealDelay: \(String(format: "%.2f", PillPlacement.revealDelay)) FullscreenHideDelay: \(String(format: "%.2f", PillPlacement.fullscreenHideDelay))
-        FocusGoal: \(FocusSession.shared.goal.rawValue)m phase \(String(describing: FocusSession.shared.phase)) elapsed \(String(format: "%.0f", FocusSession.shared.displayElapsed))s
+        Focus: phase \(String(describing: FocusSession.shared.phase)) elapsed \(String(format: "%.0f", FocusSession.shared.displayElapsed))s
         Fullscreen: \(FullscreenWatcher.shared.isFullscreen ? "yes" : "no")
         ExpandedPlacement: follows \(PillPlacement.edge.rawValue) on the chosen display
         \(LaunchAtLogin.diagnosticLine())

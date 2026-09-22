@@ -23,6 +23,10 @@
 "50 min" = "50 min";
 "Done" = "Listo";
 "Paused" = "Pausa";
+"Muted" = "Silencio";
+"Click the collapsed notch to start or pause. The timer counts up until you pause or reset it. Scroll the notch to change volume. Double-click to mute." = "Clic en la muesca plegada para iniciar o pausar. El tiempo sigue hasta que pausas o reinicias. Scroll en el notch = volumen. Doble clic = mute. Clic = foco.";
+"The collapsed notch always fades when it is idle. Hover or expand brings it back to full opacity." = "La muesca plegada siempre se atenúa en reposo. Al pasar el puntero o al expandir vuelve a opaca.";
+"When on, the strip stays open until you unpin it. Leave with the pointer and it stays. Unpin from this switch, the status menu, or right-click → Unpin on the strip." = "Activado, la tira sigue abierta hasta que la desfijas. Salir con el puntero no la contrae. Desfíjala con este interruptor, el menú de estado, o clic derecho → Desfijar en la tira.";
 "Click the collapsed notch to start or pause a focus timer. Goal Off means no done state. 25 or 50 minutes show Done gently on the notch. Default goal is Off." = "Haz clic en la muesca plegada para iniciar o pausar el temporizador de foco. Meta Desactivada = sin estado Listo. 25 o 50 minutos muestran Listo con suavidad en la muesca. La meta por omisión es Desactivada.";
 
 /* Preferencias */

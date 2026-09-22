@@ -66,7 +66,7 @@ enum NotchSize: String, CaseIterable {
     }
 }
 
-/// Fullscreen edge hit-zone thickness. Normal is the 0.4.1 default (a bit wider).
+/// Fullscreen edge hit-zone thickness. 0.4.2 locks this to Wide.
 enum HitZoneWidth: String, CaseIterable {
     case narrow
     case normal
@@ -90,9 +90,10 @@ enum HitZoneWidth: String, CaseIterable {
     }
 }
 
-/// Persisted placement, pin, discreet-mode, and notch-chrome settings.
+/// Persisted placement, pin, and notch-chrome settings.
 /// Launch never writes these. Missing keys mean: top center, not pinned,
-/// discreet mode on at 52% opacity, black theme, medium size, normal hit zone.
+/// discreet fade at 52% opacity (always on), black theme, medium size.
+/// Fullscreen hit zone is always Wide.
 enum PillPlacement {
     static let didChange = Notification.Name("PillPlacementDidChange")
 
@@ -172,14 +173,8 @@ enum PillPlacement {
         set { UserDefaults.standard.set(newValue, forKey: pinKey) }
     }
 
-    /// Default ON when the key has never been written.
-    static var discreetMode: Bool {
-        get {
-            guard UserDefaults.standard.object(forKey: discreetKey) != nil else { return true }
-            return UserDefaults.standard.bool(forKey: discreetKey)
-        }
-        set { UserDefaults.standard.set(newValue, forKey: discreetKey) }
-    }
+    /// Always on. There is no UI toggle in 0.4.2. A stored "off" is ignored.
+    static var discreetMode: Bool { true }
 
     /// Clamped to 0.35...0.75. Default 0.52.
     static var discreetOpacity: CGFloat {
@@ -227,17 +222,8 @@ enum PillPlacement {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: sizeKey) }
     }
 
-    /// Fullscreen edge hit zone. Default normal (slightly wider than the visual tab).
-    static var hitZone: HitZoneWidth {
-        get {
-            if let raw = UserDefaults.standard.string(forKey: hitZoneKey),
-               let zone = HitZoneWidth(rawValue: raw) {
-                return zone
-            }
-            return .normal
-        }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: hitZoneKey) }
-    }
+    /// Fullscreen edge hit zone. Locked to Wide so the cinema pad is easy to find.
+    static var hitZone: HitZoneWidth { .wide }
 
     /// Hover-expand delay. Snappier than 0.4.0’s 0.14s.
     /// `defaults write com.touchbarpill.TouchBarPill RevealDelay -float 0.08`
@@ -248,11 +234,11 @@ enum PillPlacement {
     }
 
     /// Fullscreen re-conceal delay after the pointer leaves.
-    /// `defaults write com.touchbarpill.TouchBarPill FullscreenHideDelay -float 0.9`
+    /// `defaults write com.touchbarpill.TouchBarPill FullscreenHideDelay -float 0.25`
     static var fullscreenHideDelay: TimeInterval {
         let raw = UserDefaults.standard.double(forKey: fullscreenHideDelayKey)
-        guard raw > 0 else { return 0.85 }
-        return min(max(raw, 0.3), 3)
+        guard raw > 0 else { return 0.22 }
+        return min(max(raw, 0.05), 3)
     }
 
     static func storeEdge(_ edge: PillEdge) {

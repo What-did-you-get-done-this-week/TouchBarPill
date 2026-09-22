@@ -1,91 +1,89 @@
-COMO ABRIR — TouchBarPill 0.4.1
+COMO ABRIR — TouchBarPill 0.4.2
 ================================
 
 Qué es
 ------
-TouchBarPill es una utilidad de barra de menú. Plegada, es una muesca en el borde que elijas (centro superior por omisión). Al pasar el puntero se expande a la Touch Bar adaptativa en vivo. Desde 0.4.0 la muesca plegada también es un temporizador de foco manual y se oculta sola en pantalla completa. En 0.4.1: volumen con la rueda, silencio con doble clic, temas/tamaño, y zona de impacto más usable en cine.
+TouchBarPill es una utilidad de barra de menú. Plegada, es una muesca en el borde que elijas (centro superior por omisión). Al pasar el puntero se expande a la Touch Bar adaptativa en vivo. El foco es un cronómetro abierto (sin meta). En pantalla completa la muesca desaparece del todo hasta que el puntero toca la zona del borde.
+
+Scroll en el notch = volumen. Doble clic = mute. Clic = foco.
 
 Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
-2. Abre TouchBarPill-0.4.1.app (Escritorio o Descargas).
+2. Abre TouchBarPill-0.4.2.app (Escritorio o Descargas).
    Si macOS bloquea sobrescribir un .app antiguo (MACL), usa la copia de
-   Descargas o TouchBarPill-0.4.1-fresh.app / renómbrala a mano.
-   TouchBarPill.app sin versión puede quedarse en 0.3.x si está bloqueado.
+   Descargas o TouchBarPill-0.4.2-fresh.app / renómbrala a mano.
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
 
 Clic, rueda y puntero (importante)
 ----------------------------------
-- Pasar el puntero (hover): tras un breve retraso (~0,09 s) la muesca se EXPÁNDE a la Touch Bar. Así un arrastre puede empezar sin abrirla.
+Scroll en el notch = volumen. Doble clic = mute. Clic = foco.
+
+- Pasar el puntero (hover): tras un breve retraso (~0,09 s) la muesca se EXPÁNDE a la Touch Bar. Un scroll de volumen cancela esa expansión para que la rueda no abra la tira.
 - Clic en la muesca PLEGADA: inicia / pausa el FOCO. No fija ni expande la tira.
-  Nota de tiempo: el foco espera el intervalo estándar de doble clic del sistema
-  (~0,5 s) para no confundir un doble clic con dos toques de foco.
-- Doble clic en la muesca PLEGADA: silencia / reactiva el volumen del sistema
-  (CoreAudio). No expande la tira.
-- Rueda / gesto de desplazamiento sobre la muesca plegada (o sobre la zona de
-  impacto casi invisible en pantalla completa): sube o baja el volumen del
-  sistema. Puede mostrar un % breve en la muesca.
+  El foco espera el intervalo de doble clic del sistema (~0,5 s) para no
+  confundir un doble clic con dos toques de foco.
+- Doble clic en la muesca PLEGADA: silencia / reactiva el volumen del sistema.
+  La muesca muestra «Silencio» en grande. No expande la tira.
+- Rueda / desplazamiento sobre la muesca plegada (también sobre la zona de
+  impacto ancha, casi invisible, en pantalla completa): sube o baja el volumen
+  al momento y muestra el % en grande. No pide Accesibilidad.
 - Arrastrar por el borde: mueve la muesca. Al soltar encima, no cuenta como clic
   de foco; el hover puede expandir después.
-- Clic con la tira ya expandida: reenvía el toque a la Touch Bar real (como siempre).
+- Clic con la tira ya expandida: reenvía el toque a la Touch Bar real.
 
-Foco (M6)
----------
-- Reposo (sin sesión): la etiqueta dice «Touch Bar» (tipografía SF Pro Rounded,
-  peso medio, tracking un poco más cerrado).
-- Clic: arranca el cronómetro → «0:01», «12:34»…
-- Otro clic: pausa (tiempo atenuado + ⏸). Otro clic: reanuda.
-- Meta (menú de estado o Preferencias): Desactivada / 25 min / 50 min. Por omisión
-  Desactivada (no sorprende).
-- Al llegar a la meta: «✓ Listo» en la muesca, sin modal. Un clic limpia Listo y
-  empieza de nuevo.
-- Cronómetro, pausa y Listo usan la misma tipografía premium que «Touch Bar».
-- Reiniciar foco: menú de estado o Preferencias.
+Foco
+----
+- Reposo: la etiqueta dice «Touch Bar».
+- Clic: arranca el cronómetro → «0:01», «12:34»… sin meta y sin «Listo».
+- Otro clic: pausa. Otro clic: reanuda.
+- Reiniciar foco: menú de estado o Preferencias. Vuelve a «Touch Bar».
 - Solo manual. No mira otras apps ni pide Accesibilidad.
-- La sesión (tiempo / pausa) vive en memoria; la meta sí se recuerda.
+- El tiempo vive en memoria. No se guarda una meta.
 
-Volumen (0.4.1)
----------------
-- Rueda sobre la muesca plegada → volumen del sistema (APIs públicas de CoreAudio).
-- Doble clic → mute / unmute.
+Volumen
+-------
+Scroll en el notch = volumen. Doble clic = mute. Clic = foco.
+
+- La rueda actúa enseguida sobre el volumen del sistema (CoreAudio).
+- El % (o Silencio) se lee claro en la muesca, más grande que la etiqueta normal.
+- En cine, el scroll también revela la muesca un momento para que se vea el %.
 - No pide micrófono ni Accesibilidad. No escanea otras apps.
 
-Pantalla completa / cine (auto-ocultar)
----------------------------------------
-- Si estás en un espacio o app a pantalla completa, o una app que oculta la
-  barra de menú (cine / inmersivo, vía opciones públicas de presentación), la
-  muesca plegada se vuelve casi invisible para no distraer.
-- Queda un hit target casi invisible en el mismo sitio del borde. La anchura
-  por omisión (Normal) es un poco más ancha que la pestaña visible; Preferencias
-  / menú → Zona de impacto: Estrecha / Normal / Ancha.
-- Pasa el puntero por ahí: la muesca vuelve (opacidad) un poco más rápido que
-  antes; al salir, tarda un poco más en ocultarse otra vez (menos parpadeo).
-  Opcional: defaults write … RevealDelay / FullscreenHideDelay.
-- Si la tira está fijada (Pin expanded) en pantalla completa, permanece usable.
-- Al salir de pantalla completa, la muesca plegada vuelve al modo normal
-  (con opacidad discreta si está activada).
-- Detección con APIs públicas de AppKit. No lee datos de otras apps.
+Pantalla completa / cine
+------------------------
+- En un espacio a pantalla completa, o cuando una app oculta la barra de menú
+  (cine), la muesca plegada no se dibuja: queda invisible, sin sombra.
+- Sigue habiendo una zona de impacto ancha (Wide, fija) en el mismo borde.
+- El puntero en esa zona: la muesca aparece. Al salir, se oculta otra vez.
+- Si la tira está fijada (Fijar expandida), permanece usable.
+- Al salir de pantalla completa, la muesca vuelve (atenuada en reposo).
+- Detección con opciones públicas de AppKit y el marco de la pantalla.
+  No lee datos de otras apps. La preferencia de ocultar sola la barra de menú,
+  mientras la barra sigue ocupando sitio, no esconde la muesca.
 
-Aspecto de la muesca (0.4.1)
----------------------------
-- Tema: Negro (omisión), Grafito, Acento suave (azul profundo). Solo el cromado
-  plegado; la señal DFR no cambia.
-- Tamaño: S / M (M ≈ tamaño de 0.4.0). Se recuerda.
-- Preferencias o menú de estado (ES/EN).
+Aspecto
+-------
+- Orejas de Medio izquierda y Medio derecha: la misma curva que arriba y abajo,
+  las dos puntas simétricas.
+- Tema: Negro, Grafito, Acento suave. Tamaño: S / M.
+- La muesca en reposo siempre se atenúa (modo discreto fijo, sin interruptor).
 
-Lo que se mantiene
-------------------
-- Posiciones: centro superior / inferior / medio izquierda / derecha; arrastre.
-- Fijar expandida: chincheta suave; clic derecho → Desfijar; menú / Preferencias.
-- Modo discreto, Abrir al iniciar sesión OFF por omisión, señal DFR.
-- Foco hub.
+Posición y fijar
+----------------
+- Centro superior / inferior / medio izquierda / derecha, y arrastre.
+- Fijar expandida: menú de estado, Preferencias, o clic derecho → Desfijar
+  en la tira expandida. No hay chincheta encima de la tira.
+- Pantalla: el menú y Preferencias solo muestran Pantalla si hay más de un monitor.
 
 Preferencias y menú
 -------------------
-Icono de la barra de menú → Preferencias… / Meta de foco / Reiniciar foco /
-Posición / Pantalla / Tema / Tamaño / Zona de impacto / Fijar / Discreto /
-Abrir al iniciar sesión / Copiar diagnósticos / Salir.
+Icono de la barra de menú → Preferencias… abre una ventana de verdad
+(tema, tamaño, opacidad en reposo, fijar, posición, abrir al iniciar sesión,
+reiniciar foco). Copiar diagnósticos sigue en el menú y en esa ventana.
+
+En un solo monitor no aparece el ítem Pantalla.
 
 Salir
 -----
@@ -94,4 +92,3 @@ Icono de la barra de menú → Salir de TouchBarPill (⌘Q en ese menú).
 Nota
 ----
 No escanea otras apps. No pide Accesibilidad. No lee el contenido de otras ventanas.
-No es M5.

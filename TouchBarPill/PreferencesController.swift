@@ -1,8 +1,8 @@
 import AppKit
 
-/// Preferences for the stream, collapse delay, login item, display, position,
-/// pin, discreet mode, focus goal, notch chrome, and fullscreen hit zone.
-final class PreferencesController: NSWindowController {
+/// Preferences window. Discreet mode and the fullscreen hit zone are fixed
+/// (always on, Wide) and are not shown. Focus is an open-ended timer.
+final class PreferencesController: NSWindowController, NSWindowDelegate {
     private let statusTitle = NSTextField(labelWithString: L("Stream"))
     private let statusBody = NSTextField(wrappingLabelWithString: L("Starting…"))
     private let delayValue = NSTextField(labelWithString: "")
@@ -11,29 +11,29 @@ final class PreferencesController: NSWindowController {
     private let loginSettingsButton = NSButton(title: L("Open Login Items Settings"), target: nil, action: nil)
     private let displayPopup = NSPopUpButton()
     private let displayNote = NSTextField(wrappingLabelWithString: "")
+    private var displayRow: NSStackView!
     private let positionPopup = NSPopUpButton()
     private let pinSwitch = NSSwitch()
-    private let discreetSwitch = NSSwitch()
     private let opacitySlider = NSSlider()
     private let opacityReadout = NSTextField(labelWithString: "")
-    private let focusGoalPopup = NSPopUpButton()
     private let resetFocusButton = NSButton(title: L("Reset Focus"), target: nil, action: nil)
     private let themePopup = NSPopUpButton()
     private let sizePopup = NSPopUpButton()
-    private let hitZonePopup = NSPopUpButton()
     private var mirror: DFRMirror?
     private var suppressUI = false
 
     convenience init() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 720),
-            styleMask: [.titled, .closable],
+        let window = PreferencesWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 560),
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
         window.title = L("TouchBarPill Preferences")
         window.isReleasedWhenClosed = false
+        window.hidesOnDeactivate = false
         self.init(window: window)
+        window.delegate = self
         buildContent()
         NotificationCenter.default.addObserver(
             self,
@@ -47,6 +47,12 @@ final class PreferencesController: NSWindowController {
             name: FocusSession.didChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screensChanged),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
     }
 
     deinit {
@@ -58,16 +64,46 @@ final class PreferencesController: NSWindowController {
         refresh()
     }
 
+    /// Status-item actions fire while the menu is still closing. Activation in
+    /// that window is discarded on macOS 14, which is why Preferences did nothing.
     func show() {
         refresh()
         refreshLogin()
-        window?.center()
-        if #available(macOS 14.0, *) {
-            NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
+        guard let window else { return }
+        window.hidesOnDeactivate = false
+        window.level = .floating
+        window.collectionBehavior.formUnion([.moveToActiveSpace, .fullScreenAuxiliary])
+        fit(window)
+        DispatchQueue.main.async { [weak self] in
+            self?.orderFront()
         }
-        window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func orderFront() {
+        guard let window else { return }
+        // macOS 14 drops activate(ignoringOtherApps:) for an LSUIElement app,
+        // so the window never became key. Become a regular app for this window
+        // only; windowWillClose returns to accessory (no Dock icon).
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        window.level = .floating
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        DispatchQueue.main.async {
+            NSApp.setActivationPolicy(.accessory)
+        }
+    }
+
+    private func fit(_ window: NSWindow) {
+        let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 480, height: 640)
+        let height = min(560, max(320, visible.height - 32))
+        let width = min(480, max(360, visible.width - 32))
+        window.setContentSize(NSSize(width: width, height: height))
     }
 
     func refresh() {
@@ -177,22 +213,14 @@ final class PreferencesController: NSWindowController {
         pinSwitch.target = self
         pinSwitch.action = #selector(pinChanged(_:))
         pinSwitch.setAccessibilityLabel(L("Pin expanded"))
-        let pinNote = note(L("When on, the strip stays open until you unpin it. Leave with the pointer and it stays. Unpin from this switch, the status menu, right-click → Unpin on the strip, or the soft pushpin that appears while hovering a pinned strip."))
+        let pinNote = note(L("When on, the strip stays open until you unpin it. Leave with the pointer and it stays. Unpin from this switch, the status menu, or right-click → Unpin on the strip."))
 
-        let discreetLabel = sectionLabel(L("Discreet mode"))
-        discreetSwitch.target = self
-        discreetSwitch.action = #selector(discreetChanged(_:))
-        discreetSwitch.setAccessibilityLabel(L("Discreet mode"))
-        let discreetNote = note(L("When the tab is collapsed and idle, it fades. Hover or expand brings it back to full opacity. On by default."))
+        let fadeNote = note(L("The collapsed notch always fades when it is idle. Hover or expand brings it back to full opacity."))
 
-        let focusLabel = sectionLabel(L("Focus Goal"))
-        focusGoalPopup.target = self
-        focusGoalPopup.action = #selector(focusGoalChanged(_:))
-        focusGoalPopup.setAccessibilityLabel(L("Focus Goal"))
+        let focusNote = note(L("Click the collapsed notch to start or pause. The timer counts up until you pause or reset it. Scroll the notch to change volume. Double-click to mute."))
         resetFocusButton.bezelStyle = .rounded
         resetFocusButton.target = self
         resetFocusButton.action = #selector(resetFocus(_:))
-        let focusNote = note(L("Click the collapsed notch to start or pause a focus timer. Goal Off means no done state. 25 or 50 minutes show Done gently on the notch. Default goal is Off."))
 
         let themeLabel = sectionLabel(L("Notch theme"))
         themePopup.target = self
@@ -205,12 +233,6 @@ final class PreferencesController: NSWindowController {
         sizePopup.action = #selector(sizeChanged(_:))
         sizePopup.setAccessibilityLabel(L("Notch size"))
         let sizeNote = note(L("S is smaller; M matches the previous size. Label and silhouette scale together."))
-
-        let hitZoneLabel = sectionLabel(L("Hit zone"))
-        hitZonePopup.target = self
-        hitZonePopup.action = #selector(hitZoneChanged(_:))
-        hitZonePopup.setAccessibilityLabel(L("Hit zone"))
-        let hitZoneNote = note(L("Fullscreen edge target width. Narrow / Normal / Wide. Normal is a bit wider than the visual tab so the near-invisible hit area is easier to find."))
 
         let opacityLabel = sectionLabel(L("Idle opacity"))
         opacitySlider.minValue = 0.35
@@ -229,18 +251,16 @@ final class PreferencesController: NSWindowController {
         let copy = NSButton(title: L("Copy Diagnostics"), target: self, action: #selector(copyDiagnostics))
         copy.bezelStyle = .rounded
 
+        displayRow = labeledRow(displayLabel, displayPopup)
         let rows = [
             labeledRow(delayLabel, delayValue),
             labeledRow(loginLabel, loginSwitch),
-            labeledRow(displayLabel, displayPopup),
+            displayRow!,
             labeledRow(positionLabel, positionPopup),
             labeledRow(pinLabel, pinSwitch),
-            labeledRow(discreetLabel, discreetSwitch),
             labeledRow(opacityLabel, opacityCluster()),
-            labeledRow(focusLabel, focusGoalPopup),
             labeledRow(themeLabel, themePopup),
             labeledRow(sizeLabel, sizePopup),
-            labeledRow(hitZoneLabel, hitZonePopup),
         ]
         stack.addArrangedSubview(heading)
         stack.addArrangedSubview(intro)
@@ -258,23 +278,19 @@ final class PreferencesController: NSWindowController {
         stack.addArrangedSubview(rows[4])
         stack.addArrangedSubview(pinNote)
         stack.addArrangedSubview(rows[5])
-        stack.addArrangedSubview(discreetNote)
-        stack.addArrangedSubview(rows[6])
-        stack.addArrangedSubview(rows[7])
+        stack.addArrangedSubview(fadeNote)
         stack.addArrangedSubview(focusNote)
         stack.addArrangedSubview(resetFocusButton)
-        stack.addArrangedSubview(rows[8])
+        stack.addArrangedSubview(rows[6])
         stack.addArrangedSubview(themeNote)
-        stack.addArrangedSubview(rows[9])
+        stack.addArrangedSubview(rows[7])
         stack.addArrangedSubview(sizeNote)
-        stack.addArrangedSubview(rows[10])
-        stack.addArrangedSubview(hitZoneNote)
         stack.addArrangedSubview(copy)
         for row in rows {
             row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
 
-        for view in [intro, statusBody, delayNote, loginNote, displayNote, positionNote, pinNote, discreetNote, focusNote, themeNote, sizeNote, hitZoneNote] {
+        for view in [intro, statusBody, delayNote, loginNote, displayNote, positionNote, pinNote, fadeNote, focusNote, themeNote, sizeNote] {
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
         reloadPlacementControls()
@@ -322,13 +338,21 @@ final class PreferencesController: NSWindowController {
         reloadPlacementControls()
     }
 
+    @objc private func screensChanged() {
+        reloadPlacementControls()
+    }
+
     @objc private func focusChanged() {
-        reloadFocusControls()
+        resetFocusButton.isEnabled = FocusSession.shared.phase != .idle
     }
 
     private func reloadPlacementControls() {
         suppressUI = true
         defer { suppressUI = false }
+
+        let multiDisplay = NSScreen.screens.count > 1
+        displayRow.isHidden = !multiDisplay
+        displayNote.isHidden = !multiDisplay
 
         displayPopup.removeAllItems()
         let resolvedID = DisplayList.resolved().map { DisplayList.id(of: $0) }
@@ -371,8 +395,7 @@ final class PreferencesController: NSWindowController {
         }
 
         pinSwitch.state = PillPlacement.pinExpanded ? .on : .off
-        discreetSwitch.state = PillPlacement.discreetMode ? .on : .off
-        opacitySlider.isEnabled = PillPlacement.discreetMode
+        opacitySlider.isEnabled = true
         opacitySlider.doubleValue = Double(PillPlacement.discreetOpacity)
         opacityReadout.stringValue = "\(Int((PillPlacement.discreetOpacity * 100).rounded()))%"
 
@@ -390,28 +413,6 @@ final class PreferencesController: NSWindowController {
         }
         sizePopup.selectItem(withTag: NotchSize.allCases.firstIndex(of: PillPlacement.size) ?? 1)
 
-        hitZonePopup.removeAllItems()
-        for (index, zone) in HitZoneWidth.allCases.enumerated() {
-            hitZonePopup.addItem(withTitle: zone.menuTitle)
-            hitZonePopup.lastItem?.tag = index
-        }
-        hitZonePopup.selectItem(withTag: HitZoneWidth.allCases.firstIndex(of: PillPlacement.hitZone) ?? 1)
-
-        reloadFocusControls()
-    }
-
-    private func reloadFocusControls() {
-        let was = suppressUI
-        suppressUI = true
-        defer { suppressUI = was }
-
-        focusGoalPopup.removeAllItems()
-        let current = FocusSession.shared.goal
-        for goal in FocusGoal.allCases {
-            focusGoalPopup.addItem(withTitle: goal.shortTitle)
-            focusGoalPopup.lastItem?.tag = goal.rawValue
-        }
-        focusGoalPopup.selectItem(withTag: current.rawValue)
         resetFocusButton.isEnabled = FocusSession.shared.phase != .idle
     }
 
@@ -452,22 +453,11 @@ final class PreferencesController: NSWindowController {
         PillPlacement.postChange()
     }
 
-    @objc private func discreetChanged(_ sender: NSSwitch) {
-        guard !suppressUI else { return }
-        PillPlacement.discreetMode = sender.state == .on
-        PillPlacement.postChange()
-    }
-
     @objc private func opacityChanged(_ sender: NSSlider) {
         guard !suppressUI else { return }
         PillPlacement.discreetOpacity = CGFloat(sender.doubleValue)
         opacityReadout.stringValue = "\(Int((sender.doubleValue * 100).rounded()))%"
         PillPlacement.postChange()
-    }
-
-    @objc private func focusGoalChanged(_ sender: NSPopUpButton) {
-        guard !suppressUI, let item = sender.selectedItem else { return }
-        FocusSession.shared.goal = FocusGoal(rawValue: item.tag) ?? .off
     }
 
     @objc private func resetFocus(_ sender: NSButton) {
@@ -488,16 +478,15 @@ final class PreferencesController: NSWindowController {
         PillPlacement.postChange()
     }
 
-    @objc private func hitZoneChanged(_ sender: NSPopUpButton) {
-        guard !suppressUI, let item = sender.selectedItem,
-              HitZoneWidth.allCases.indices.contains(item.tag) else { return }
-        PillPlacement.hitZone = HitZoneWidth.allCases[item.tag]
-        PillPlacement.postChange()
-    }
-
     @objc private func copyDiagnostics() {
         guard let mirror else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(AppDelegate.diagnosticsText(mirror: mirror), forType: .string)
     }
+}
+
+/// A normal window that can become key from an accessory (menu-bar) app.
+private final class PreferencesWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }

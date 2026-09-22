@@ -23,6 +23,10 @@
 "50 min" = "50 min";
 "Done" = "Done";
 "Paused" = "Paused";
+"Muted" = "Muted";
+"Click the collapsed notch to start or pause. The timer counts up until you pause or reset it. Scroll the notch to change volume. Double-click to mute." = "Click the collapsed notch to start or pause. The timer counts up until you pause or reset it. Scroll the notch to change volume. Double-click to mute.";
+"The collapsed notch always fades when it is idle. Hover or expand brings it back to full opacity." = "The collapsed notch always fades when it is idle. Hover or expand brings it back to full opacity.";
+"When on, the strip stays open until you unpin it. Leave with the pointer and it stays. Unpin from this switch, the status menu, or right-click → Unpin on the strip." = "When on, the strip stays open until you unpin it. Leave with the pointer and it stays. Unpin from this switch, the status menu, or right-click → Unpin on the strip.";
 "Click the collapsed notch to start or pause a focus timer. Goal Off means no done state. 25 or 50 minutes show Done gently on the notch. Default goal is Off." = "Click the collapsed notch to start or pause a focus timer. Goal Off means no done state. 25 or 50 minutes show Done gently on the notch. Default goal is Off.";
 
 /* Preferences */

@@ -1,58 +1,26 @@
 import AppKit
 import Foundation
 
-/// Manual focus timer for the collapsed notch. No Accessibility, no app watching.
-enum FocusGoal: Int, CaseIterable {
-    case off = 0
-    case minutes25 = 25
-    case minutes50 = 50
-
-    var menuTitle: String {
-        switch self {
-        case .off: return L("Goal: Off")
-        case .minutes25: return L("Goal: 25 min")
-        case .minutes50: return L("Goal: 50 min")
-        }
-    }
-
-    var shortTitle: String {
-        switch self {
-        case .off: return L("Off")
-        case .minutes25: return L("25 min")
-        case .minutes50: return L("50 min")
-        }
-    }
-}
-
 enum FocusPhase: Equatable {
     case idle
     case running
     case paused
-    case done
 }
 
-/// In-memory session. Only the goal preference is persisted.
+/// In-memory open-ended timer. No goal, no done state, no other-app watching.
 final class FocusSession {
     static let shared = FocusSession()
     static let didChange = Notification.Name("FocusSessionDidChange")
-    static let goalKey = "FocusGoalMinutes"
 
     private(set) var phase: FocusPhase = .idle
-    /// Accumulated elapsed seconds while running/paused/done.
+    /// Accumulated elapsed seconds while running or paused.
     private(set) var elapsed: TimeInterval = 0
     private var runStartedAt: Date?
     private var tick: Timer?
 
-    var goal: FocusGoal {
-        get {
-            let raw = UserDefaults.standard.integer(forKey: Self.goalKey)
-            return FocusGoal(rawValue: raw) ?? .off
-        }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: Self.goalKey)
-            postChange()
-            checkGoal()
-        }
+    private init() {
+        // 0.4.1 stored a 25/50 goal. 0.4.2 is open-ended only.
+        UserDefaults.standard.removeObject(forKey: "FocusGoalMinutes")
     }
 
     /// Live elapsed including the current running segment.
@@ -81,8 +49,6 @@ final class FocusSession {
             return formattedTime
         case .paused:
             return "⏸ \(formattedTime)"
-        case .done:
-            return "✓ \(L("Done"))"
         }
     }
 
@@ -92,11 +58,10 @@ final class FocusSession {
         case .idle: return 0.88
         case .running: return 0.94
         case .paused: return 0.62
-        case .done: return 0.9
         }
     }
 
-    /// Single click on the collapsed notch: start / pause / clear-done-and-start.
+    /// Single click on the collapsed notch: start / pause / resume.
     func toggleFromClick() {
         switch phase {
         case .idle:
@@ -105,15 +70,12 @@ final class FocusSession {
             pause()
         case .paused:
             resume()
-        case .done:
-            reset()
-            start()
         }
     }
 
     func start() {
-        guard phase == .idle || phase == .paused || phase == .done else { return }
-        if phase == .done || phase == .idle {
+        guard phase == .idle || phase == .paused else { return }
+        if phase == .idle {
             elapsed = 0
         }
         phase = .running
@@ -152,7 +114,7 @@ final class FocusSession {
     private func startTick() {
         stopTick()
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            self?.tickFired()
+            self?.postChange()
         }
         timer.tolerance = 0.05
         RunLoop.main.add(timer, forMode: .common)
@@ -162,28 +124,6 @@ final class FocusSession {
     private func stopTick() {
         tick?.invalidate()
         tick = nil
-    }
-
-    private func tickFired() {
-        checkGoal()
-        postChange()
-    }
-
-    private func checkGoal() {
-        guard phase == .running else { return }
-        let minutes = goal.rawValue
-        guard minutes > 0 else { return }
-        if displayElapsed >= TimeInterval(minutes * 60) {
-            if let runStartedAt {
-                elapsed += Date().timeIntervalSince(runStartedAt)
-            }
-            self.runStartedAt = nil
-            // Snap elapsed to the goal so the done state shows the target cleanly.
-            elapsed = TimeInterval(minutes * 60)
-            phase = .done
-            stopTick()
-            postChange()
-        }
     }
 
     private func postChange() {
