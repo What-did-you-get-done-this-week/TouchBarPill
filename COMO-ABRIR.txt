@@ -1,4 +1,4 @@
-COMO ABRIR — TouchBarPill 0.4.4
+COMO ABRIR — TouchBarPill 0.4.5
 ================================
 
 Qué es
@@ -12,8 +12,8 @@ No hay ventana de Preferencias. Todo está en el menú de la barra de menú.
 Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
-2. Abre TouchBarPill-0.4.4.app (Descargas) o TouchBarPill-0.4.4-fresh.app (Escritorio).
-   Si macOS bloquea sobrescribir un .app antiguo (MACL), usa la copia fresh.
+2. Abre TouchBarPill.app o TouchBarPill-0.4.5.app (Escritorio), o la copia TouchBarPill-0.4.5.app en Descargas.
+   Si macOS bloquea sobrescribir un .app antiguo, cierra TouchBarPill antes (menú → Salir).
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
 
@@ -23,24 +23,27 @@ De izquierda a derecha:
 
 - Ala izquierda = foco. En reposo es un icono de reloj (no un triángulo de play). Clic: inicia el foco.
 - Centro = «Touch Bar» cuando no hay sesión. Al pasar el puntero (breve retraso) se expande la Touch Bar adaptativa. Un clic en el centro no cambia el foco.
-- Ala derecha = volumen. Icono de altavoz. Al pasar el puntero aparece una barra de volumen anclada al ala, sin abrir la Touch Bar. La rueda sube o baja el volumen del sistema y el % se lee en esa barra. Clic o doble clic: silencio / reactivar.
+- Ala derecha = volumen. Icono de altavoz. Al pasar el puntero aparece una barra de volumen anclada al ala, sin abrir la Touch Bar. La rueda cambia el volumen del sistema (el sentido está invertido respecto a 0.4.4: lo que subía ahora baja, y al revés). El % se lee en esa barra. Clic o doble clic: silencio / reactivar. A 0% o en silencio el altavoz del ala y el de la barra salen tachados.
 
 Pasar el puntero por el ala izquierda o la derecha NO abre la Touch Bar y cancela una expansión que estuviera esperando.
+
+Si la tira está abierta y el puntero sale —a la barra de menú, a otra app, o simplemente fuera de la muesca y de la tira— se pliega a los 0,4 s. No se queda abierta. Fijar expandida sigue impidiendo ese pliegue.
 
 Foco
 ----
 - Reposo: reloj en el ala izquierda y «Touch Bar» en el centro.
-- Clic en el reloj, o menú Iniciar foco: el centro pasa a minutos enteros, 0m, 1m, 12m… No cuenta los segundos. El ala izquierda pasa a Pausa y Parar.
+- Clic en el reloj: el centro pasa a minutos enteros, 0m, 1m, 12m… No cuenta los segundos. El ala izquierda pasa a Pausa y Parar.
 - Pausa: los minutos se quedan quietos en el centro. El ala izquierda ofrece Reanudar y Parar.
-- Parar (o menú Reiniciar foco): se acaba la sesión. El centro vuelve a «Touch Bar» y el ala izquierda al reloj.
-- El menú de estado también tiene Iniciar foco / Pausar foco / Reanudar foco y Reiniciar foco.
+- Parar: se acaba la sesión. El centro vuelve a «Touch Bar» y el ala izquierda al reloj.
+- El foco solo se controla con el ala izquierda (iniciar, pausa, parar, reanudar). El menú de estado no tiene Iniciar foco, Pausar foco ni Reiniciar foco.
 - Solo manual. No mira otras apps ni pide Accesibilidad.
 
 Volumen
 -------
 - Solo el ala derecha y la barra que sale de ella.
-- Rueda, dos dedos u Opción+scroll: volumen del sistema (CoreAudio). Se ve el %.
-- Clic o doble clic: silencio, con 🔇. Otro clic: vuelve el %.
+- Rueda, dos dedos u Opción+scroll: volumen del sistema (CoreAudio). El sentido está invertido respecto a 0.4.4. Se ve el %.
+- A 0% o en silencio: altavoz tachado en el ala y en la barra. Con volumen y sin silencio: altavoz normal.
+- Clic o doble clic: silencio. Otro clic: vuelve el %.
 - No pide micrófono ni Accesibilidad.
 
 Medio izquierda y medio derecha
@@ -72,7 +75,7 @@ Posición y fijar
 
 Menú
 ----
-Icono de la barra de menú: Mostrar/Ocultar, Posición, Fijar expandida, Tema (con Invisible), Tamaño, Iniciar/Pausar/Reanudar foco, Reiniciar foco, Abrir al iniciar sesión (desactivado hasta que lo actives), Copiar diagnósticos, Salir.
+Icono de la barra de menú: Mostrar/Ocultar, Posición, Fijar expandida, Tema (con Invisible), Tamaño, Abrir al iniciar sesión (desactivado hasta que lo actives), Copiar diagnósticos, Salir. No hay entradas de foco.
 
 No hay Preferencias.
 
@@ -87,7 +90,7 @@ Prueba rápida
 3. Pasa el puntero por «Touch Bar»: tras un instante se abre la tira.
 4. Clic en el reloj: el centro dice 0m. El ala izquierda muestra pausa y parar. Al minuto pasa a 1m, no antes.
 5. Pausa: los minutos se quedan. Reanudar sigue. Parar vuelve a «Touch Bar» y al reloj.
-6. Hover en el altavoz: sale la barra de volumen sin abrir la Touch Bar. La rueda cambia el %. Clic: 🔇.
+6. Hover en el altavoz: sale la barra de volumen sin abrir la Touch Bar. La rueda cambia el % (sentido invertido respecto a 0.4.4). A 0% o en silencio el altavoz sale tachado.
 7. YouTube a pantalla completa: la muesca desaparece. Tema → Invisible la oculta aunque no haya vídeo. El diagnóstico dice invisible.
 
 Nota

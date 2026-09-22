@@ -12,8 +12,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let positionMenu = NSMenu()
     private let themeMenu = NSMenu()
     private let sizeMenu = NSMenu()
-    private var focusToggleItem: NSMenuItem!
-    private var resetFocusItem: NSMenuItem!
     private var didTeardown = false
     private var mirror: DFRMirror!
     private var pill: PillPanelController!
@@ -52,15 +50,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem.title = LaunchAtLogin.menuTitle()
         loginItem.state = LaunchAtLogin.isOn ? .on : .off
         pinItem.state = PillPlacement.pinExpanded ? .on : .off
-        switch FocusSession.shared.phase {
-        case .running:
-            focusToggleItem.title = L("Pause Focus")
-        case .paused:
-            focusToggleItem.title = L("Resume Focus")
-        case .idle:
-            focusToggleItem.title = L("Start Focus")
-        }
-        resetFocusItem.isEnabled = FocusSession.shared.phase != .idle
         syncDisplayItem()
         rebuildDisplayMenu()
         rebuildPositionMenu()
@@ -104,16 +93,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let sizeItem = NSMenuItem(title: L("Notch size"), action: nil, keyEquivalent: "")
         sizeItem.submenu = sizeMenu
         menu.addItem(sizeItem)
-
-        menu.addItem(.separator())
-
-        focusToggleItem = NSMenuItem(title: L("Start Focus"), action: #selector(toggleFocus), keyEquivalent: "")
-        focusToggleItem.target = self
-        menu.addItem(focusToggleItem)
-
-        resetFocusItem = NSMenuItem(title: L("Reset Focus"), action: #selector(resetFocus), keyEquivalent: "")
-        resetFocusItem.target = self
-        menu.addItem(resetFocusItem)
 
         menu.addItem(.separator())
 
@@ -172,21 +151,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func togglePin() {
         PillPlacement.pinExpanded.toggle()
         PillPlacement.postChange()
-    }
-
-    @objc private func toggleFocus() {
-        switch FocusSession.shared.phase {
-        case .idle:
-            FocusSession.shared.start()
-        case .running:
-            FocusSession.shared.pause()
-        case .paused:
-            FocusSession.shared.resume()
-        }
-    }
-
-    @objc private func resetFocus() {
-        FocusSession.shared.reset()
     }
 
     @objc private func toggleCinema() {

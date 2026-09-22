@@ -48,6 +48,54 @@ enum ZonePolicy {
         expandsTouchBar(zone)
     }
 
+    /// Crossed speaker when output is muted or the level is zero.
+    /// A missing level (no software volume) is not treated as zero.
+    static func wantsCrossedSpeaker(muted: Bool, level: Float?) -> Bool {
+        if muted { return true }
+        guard let level else { return false }
+        return level <= 0.005
+    }
+
+    /// Volume-wing scroll steps. Positive raises output.
+    /// 0.4.5 flips the 0.4.4 sign: the direction that used to raise now lowers.
+    static func volumeScrollSteps(
+        deltaX: CGFloat,
+        deltaY: CGFloat,
+        precise: Bool,
+        invertedFromDevice: Bool
+    ) -> Float? {
+        var dx = deltaX
+        var dy = deltaY
+        if invertedFromDevice {
+            dx = -dx
+            dy = -dy
+        }
+        let dominant = abs(dy) >= abs(dx) ? dy : dx
+        let minDelta: CGFloat = precise ? 0.35 : 0.01
+        guard abs(dominant) >= minDelta else { return nil }
+        let raw: Float
+        if precise {
+            raw = Float(dominant) / 8.0
+        } else {
+            raw = dominant > 0 ? 2 : -2
+        }
+        let steps = -raw
+        guard abs(steps) > 0.04 else { return nil }
+        return steps
+    }
+
+    /// True when `mouse` misses every live chrome rect, even after `slack` points.
+    /// Empty rects are ignored so a hidden slider cannot pin the pointer at the origin.
+    static func pointerOutsideChrome(mouse: CGPoint, rects: [CGRect], slack: CGFloat) -> Bool {
+        let pad = max(0, slack)
+        for rect in rects where rect.width > 1 && rect.height > 1 {
+            if rect.insetBy(dx: -pad, dy: -pad).contains(mouse) {
+                return false
+            }
+        }
+        return true
+    }
+
     struct Layout: Equatable {
         var focusPrimary: CGRect
         var focusStop: CGRect

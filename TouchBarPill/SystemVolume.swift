@@ -31,6 +31,11 @@ enum SystemVolume {
         }
     }
 
+    /// Wing and volume overlay: crossed speaker at mute or 0%.
+    static func showsCrossedSpeaker() -> Bool {
+        ZonePolicy.wantsCrossedSpeaker(muted: isMuted(), level: volume())
+    }
+
     static func isMuted() -> Bool {
         guard let device = defaultOutputDevice() else { return false }
         for element: AudioObjectPropertyElement in [0, 1, 2] {

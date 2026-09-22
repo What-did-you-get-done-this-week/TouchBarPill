@@ -39,6 +39,9 @@ enum PillMetrics {
         guard raw > 0 else { return 0.4 }
         return min(max(raw, 0.15), 2)
     }
+
+    /// Pointer may sit this far outside the strip or notch before we treat it as gone.
+    static let collapseSlack: CGFloat = 12
 }
 
 /// Borderless, non-activating panel. Clicks must not activate TouchBarPill,
@@ -78,11 +81,15 @@ final class PillPanelController: NSObject {
     private var hovering = false
     private var dragging = false
     private var collapseItem: DispatchWorkItem?
+    private var collapseToken = 0
     private var expandItem: DispatchWorkItem?
     private var discreetItem: DispatchWorkItem?
     private var fullscreenHideItem: DispatchWorkItem?
     private var scrollMonitor: Any?
     private var localScrollMonitor: Any?
+    private var pointerMonitor: Any?
+    private var localPointerMonitor: Any?
+    private var collapseWatch: Timer?
     private var lastScrollStamp: TimeInterval = -1
     private var hoverZone: ZoneID?
     private var syncingPointer = false
@@ -110,6 +117,7 @@ final class PillPanelController: NSObject {
             return root.hitShapeContains(point)
         }
         root.onPointer = { [weak self] in self?.syncPointer() }
+        root.onPointerExit = { [weak self] in self?.pointerExited() }
         root.onPress = { [weak self] in self?.pressBegan() }
         root.onFocusPrimary = { [weak self] in self?.focusPrimaryClicked() }
         root.onFocusStop = { [weak self] in self?.focusStopClicked() }
@@ -167,21 +175,65 @@ final class PillPanelController: NSObject {
             self.scrollCollapsed(event)
             return nil
         }
+        // Tracking areas drop mouseExited when the cursor leaves into the menu
+        // bar or another app. These monitors plus the timer read the pointer
+        // location only — no other-app windows, pixels, or titles.
+        let moveMask: NSEvent.EventTypeMask = [
+            .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+        ]
+        pointerMonitor = NSEvent.addGlobalMonitorForEvents(matching: moveMask) { [weak self] _ in
+            if Thread.isMainThread {
+                self?.sampleExpandedPointer()
+            } else {
+                DispatchQueue.main.async { self?.sampleExpandedPointer() }
+            }
+        }
+        localPointerMonitor = NSEvent.addLocalMonitorForEvents(matching: moveMask) { [weak self] event in
+            self?.sampleExpandedPointer()
+            return event
+        }
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.addObserver(
+            self,
+            selector: #selector(frontmostAppChanged),
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
+        workspace.addObserver(
+            self,
+            selector: #selector(frontmostAppChanged),
+            name: NSWorkspace.didDeactivateApplicationNotification,
+            object: nil
+        )
+        let watch = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            self?.sampleExpandedPointer()
+        }
+        watch.tolerance = 0.08
+        RunLoop.main.add(watch, forMode: .common)
+        collapseWatch = watch
     }
 
     deinit {
+        collapseWatch?.invalidate()
         if let scrollMonitor {
             NSEvent.removeMonitor(scrollMonitor)
         }
         if let localScrollMonitor {
             NSEvent.removeMonitor(localScrollMonitor)
         }
+        if let pointerMonitor {
+            NSEvent.removeMonitor(pointerMonitor)
+        }
+        if let localPointerMonitor {
+            NSEvent.removeMonitor(localPointerMonitor)
+        }
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         NotificationCenter.default.removeObserver(self)
     }
 
     func show() {
         guard let screen = DisplayList.resolved() else { return }
-        collapseItem?.cancel()
+        cancelCollapse()
         let pinned = PillPlacement.pinExpanded
         expanded = pinned
         hovering = false
@@ -204,7 +256,7 @@ final class PillPanelController: NSObject {
     }
 
     func hide() {
-        collapseItem?.cancel()
+        cancelCollapse()
         expandItem?.cancel()
         expandItem = nil
         discreetItem?.cancel()
@@ -267,27 +319,28 @@ final class PillPanelController: NSObject {
         defer { syncingPointer = false }
 
         if expanded {
-            let inside = root.pointerInsideShape()
-            if inside {
-                hovering = true
-                hoverZone = nil
-                root.setHotZone(nil)
-                collapseItem?.cancel()
-                discreetItem?.cancel()
-                discreetItem = nil
-                fullscreenHideItem?.cancel()
-                fullscreenHideItem = nil
-                if fullscreenConcealed { setFullscreenConcealed(false, animated: false) }
-                setOpacity(1, animated: true)
-            } else if panel.frame.contains(NSEvent.mouseLocation) {
-                hovering = true
-            } else {
+            if PillPlacement.pinExpanded {
+                hovering = !pointerOutsideLiveChrome()
+                cancelCollapse()
+                return
+            }
+            if pointerOutsideLiveChrome() {
                 hovering = false
                 hoverZone = nil
                 root.setHotZone(nil)
-                guard !PillPlacement.pinExpanded else { return }
-                scheduleCollapse()
+                ensureCollapseScheduled()
+                return
             }
+            hovering = true
+            hoverZone = nil
+            root.setHotZone(nil)
+            cancelCollapse()
+            discreetItem?.cancel()
+            discreetItem = nil
+            fullscreenHideItem?.cancel()
+            fullscreenHideItem = nil
+            if fullscreenConcealed { setFullscreenConcealed(false, animated: false) }
+            setOpacity(1, animated: true)
             return
         }
 
@@ -321,7 +374,7 @@ final class PillPanelController: NSObject {
             return
         }
 
-        collapseItem?.cancel()
+        cancelCollapse()
         discreetItem?.cancel()
         discreetItem = nil
         fullscreenHideItem?.cancel()
@@ -474,22 +527,12 @@ final class PillPanelController: NSObject {
         guard root.pointerOverVolume(slop: 6) else { return }
         if event.timestamp == lastScrollStamp { return }
         lastScrollStamp = event.timestamp
-        var dx = event.scrollingDeltaX
-        var dy = event.scrollingDeltaY
-        if event.isDirectionInvertedFromDevice {
-            dx = -dx
-            dy = -dy
-        }
-        let dominant = abs(dy) >= abs(dx) ? dy : dx
-        let minDelta: CGFloat = event.hasPreciseScrollingDeltas ? 0.35 : 0.01
-        guard abs(dominant) >= minDelta else { return }
-        let steps: Float
-        if event.hasPreciseScrollingDeltas {
-            steps = Float(dominant) / 8.0
-        } else {
-            steps = dominant > 0 ? 2 : -2
-        }
-        guard abs(steps) > 0.04 else { return }
+        guard let steps = ZonePolicy.volumeScrollSteps(
+            deltaX: event.scrollingDeltaX,
+            deltaY: event.scrollingDeltaY,
+            precise: event.hasPreciseScrollingDeltas,
+            invertedFromDevice: event.isDirectionInvertedFromDevice
+        ) else { return }
         cancelExpand()
         guard SystemVolume.adjust(by: steps * SystemVolume.step) != nil else { return }
         revealVolumeSlider()
@@ -501,22 +544,102 @@ final class PillPanelController: NSObject {
         VolumeChrome.sliderVisible
     }
 
-    private func scheduleCollapse() {
+    /// Notch plus expanded strip, with a few points of slack. Cinema coverage
+    /// is not part of this test: a mid-range window must not keep the strip open.
+    private func pointerOutsideLiveChrome() -> Bool {
+        var rects = [panel.frame]
+        if let screen = DisplayList.resolved() {
+            rects.append(collapsedFrame(on: screen))
+        }
+        return ZonePolicy.pointerOutsideChrome(
+            mouse: NSEvent.mouseLocation,
+            rects: rects,
+            slack: PillMetrics.collapseSlack
+        )
+    }
+
+    private func cancelCollapse() {
+        collapseToken += 1
         collapseItem?.cancel()
+        collapseItem = nil
+    }
+
+    /// Start the leave-collapse delay. Repeating this restarts the delay, so
+    /// the pointer watch must call `ensureCollapseScheduled` instead.
+    private func scheduleCollapse() {
+        guard expanded, !PillPlacement.pinExpanded, !dragging else { return }
+        collapseItem?.cancel()
+        collapseToken += 1
+        let token = collapseToken
         let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            if PillPlacement.pinExpanded { return }
-            if self.panel.frame.contains(NSEvent.mouseLocation) {
+            guard let self, self.collapseToken == token else { return }
+            self.collapseItem = nil
+            guard self.expanded, !PillPlacement.pinExpanded, !self.dragging else { return }
+            guard self.panel.isVisible else { return }
+            if !self.pointerOutsideLiveChrome() {
+                self.hovering = true
                 return
             }
+            self.hovering = false
+            self.hoverZone = nil
+            self.root.setHotZone(nil)
             self.setExpanded(false)
         }
         collapseItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + PillMetrics.collapseDelay, execute: work)
     }
 
+    private func ensureCollapseScheduled() {
+        guard collapseItem == nil else { return }
+        scheduleCollapse()
+    }
+
+    /// mouseExited on the expanded strip, or on the center zone, always arms
+    /// collapse. A missed exit is covered by `sampleExpandedPointer`.
+    private func pointerExited() {
+        let leftExpanded = expanded
+        let leftCenter = hoverZone == .center
+        if leftExpanded || leftCenter {
+            hovering = false
+            hoverZone = nil
+            root.setHotZone(nil)
+            cancelExpand()
+            if leftExpanded {
+                scheduleCollapse()
+            } else {
+                refreshChromeOpacity(animated: true)
+                scheduleFullscreenConcealIfNeeded()
+            }
+            return
+        }
+        syncPointer()
+    }
+
+    /// If the strip is open, unpinned, and the pointer is outside, arm collapse.
+    /// Safe to call from a timer, a mouse monitor, or an app switch.
+    private func sampleExpandedPointer() {
+        guard panel.isVisible, expanded, !dragging else { return }
+        if PillPlacement.pinExpanded {
+            cancelCollapse()
+            return
+        }
+        if pointerOutsideLiveChrome() {
+            hovering = false
+            hoverZone = nil
+            root.setHotZone(nil)
+            ensureCollapseScheduled()
+        } else if collapseItem != nil {
+            cancelCollapse()
+            hovering = true
+        }
+    }
+
+    @objc private func frontmostAppChanged() {
+        sampleExpandedPointer()
+    }
+
     private func setExpanded(_ expand: Bool) {
-        collapseItem?.cancel()
+        cancelCollapse()
         if expand {
             cancelExpand()
             VolumeChrome.sliderVisible = false
@@ -592,7 +715,7 @@ final class PillPanelController: NSObject {
         guard !dragging else { return }
         if FullscreenWatcher.shared.isFullscreen {
             if expanded && !PillPlacement.pinExpanded && !pointerInsidePanel() {
-                collapseItem?.cancel()
+                cancelCollapse()
                 expanded = false
                 hovering = false
                 if let screen = DisplayList.resolved() {
@@ -700,7 +823,7 @@ final class PillPanelController: NSObject {
         guard let screen = DisplayList.resolved() else { return }
 
         if PillPlacement.pinExpanded {
-            collapseItem?.cancel()
+            cancelCollapse()
             if !expanded {
                 setExpanded(true)
                 return
@@ -714,7 +837,10 @@ final class PillPanelController: NSObject {
 
         root.apply(mirror: mirror, expanded: expanded)
         refreshChromeOpacity(animated: true)
-        if !PillPlacement.pinExpanded && expanded && !hovering && !panel.frame.contains(NSEvent.mouseLocation) {
+        if !PillPlacement.pinExpanded && expanded && pointerOutsideLiveChrome() {
+            hovering = false
+            hoverZone = nil
+            root.setHotZone(nil)
             scheduleCollapse()
         } else if !expanded {
             scheduleFullscreenConcealIfNeeded()
@@ -723,7 +849,7 @@ final class PillPanelController: NSObject {
 
     private func dragCollapsed(to origin: NSPoint) {
         dragging = true
-        collapseItem?.cancel()
+        cancelCollapse()
         discreetItem?.cancel()
         discreetItem = nil
         setOpacity(1, animated: false)
@@ -914,6 +1040,7 @@ final class PillPanelController: NSObject {
 
 final class PillRootView: NSView {
     var onPointer: (() -> Void)?
+    var onPointerExit: (() -> Void)?
     var onPress: (() -> Void)?
     var onFocusPrimary: (() -> Void)?
     var onFocusStop: (() -> Void)?
@@ -1134,7 +1261,7 @@ final class PillRootView: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
-        onPointer?()
+        onPointerExit?()
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -1254,12 +1381,12 @@ final class PillRootView: NSView {
         path.lineWidth = 1
         path.stroke()
 
-        let muted = SystemVolume.isMuted()
+        let silent = SystemVolume.showsCrossedSpeaker()
         let level = CGFloat(SystemVolume.volume() ?? 0)
         let trackPath = NSBezierPath(roundedRect: geometry.track, xRadius: geometry.track.width / 2, yRadius: geometry.track.height / 2)
         NSColor.white.withAlphaComponent(0.22).setFill()
         trackPath.fill()
-        if !muted, level > 0.01 {
+        if !silent, level > 0.01 {
             let amount = geometry.fillRect(fraction: level, edge: edge)
             if amount.width > 0.5, amount.height > 0.5 {
                 NSGraphicsContext.saveGraphicsState()
@@ -1269,8 +1396,12 @@ final class PillRootView: NSView {
                 NSGraphicsContext.restoreGraphicsState()
             }
         }
-        let label = muted ? "🔇" : "\(Int((level * 100).rounded()))%"
-        drawSliderLabel(label, in: geometry.label)
+        if silent {
+            drawSpeakerMark(crossed: true, in: geometry.label, pointSize: 16 * PillPlacement.size.scale)
+        } else {
+            let label = "\(Int((level * 100).rounded()))%"
+            drawSliderLabel(label, in: geometry.label)
+        }
     }
 
     private func drawSliderLabel(_ text: String, in rect: NSRect) {
@@ -1620,8 +1751,8 @@ final class CollapsedChromeView: NSView {
     }
 
     private func drawVolumeWing(_ rect: CGRect) {
-        let name = SystemVolume.isMuted() ? "speaker.slash.fill" : "speaker.wave.2.fill"
-        drawSymbol(name, in: rect, pointSize: 14 * PillPlacement.size.scale, fallback: .speaker)
+        let crossed = SystemVolume.showsCrossedSpeaker()
+        drawSpeakerMark(crossed: crossed, in: rect, pointSize: 14 * PillPlacement.size.scale)
     }
 
     private func textFits(_ text: String, in rect: CGRect, size: CGFloat, weight: NSFont.Weight) -> Bool {
@@ -1722,13 +1853,38 @@ final class CollapsedChromeView: NSView {
             triangle.close()
             triangle.fill()
         case .speaker:
-            let mark = (SystemVolume.isMuted() ? "🔇" : "♪") as NSString
+            let mark = (SystemVolume.showsCrossedSpeaker() ? "🔇" : "♪") as NSString
             let font = NotchFont(size: side, weight: .semibold)
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
             let textSize = mark.size(withAttributes: attributes)
             mark.draw(at: NSPoint(x: rect.midX - textSize.width / 2, y: rect.midY - textSize.height / 2), withAttributes: attributes)
         }
     }
+}
+
+/// Speaker on the volume wing and in the slider overlay.
+/// Crossed when muted or at 0%; the ordinary speaker otherwise.
+func drawSpeakerMark(crossed: Bool, in rect: CGRect, pointSize: CGFloat) {
+    guard rect.width > 2, rect.height > 2 else { return }
+    let name = crossed ? "speaker.slash.fill" : "speaker.wave.2.fill"
+    let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
+        .applying(NSImage.SymbolConfiguration(hierarchicalColor: NSColor.white.withAlphaComponent(0.94)))
+    if let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config) {
+        let side = min(rect.width - 2, rect.height - 2, pointSize * 1.35)
+        guard side > 2 else { return }
+        let box = CGRect(x: rect.midX - side / 2, y: rect.midY - side / 2, width: side, height: side)
+        image.isTemplate = false
+        image.draw(in: box)
+        return
+    }
+    let mark = (crossed ? "🔇" : "♪") as NSString
+    let font = NotchFont(size: min(pointSize, rect.height * 0.8), weight: .semibold)
+    let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
+    let textSize = mark.size(withAttributes: attributes)
+    mark.draw(
+        at: NSPoint(x: rect.midX - textSize.width / 2, y: rect.midY - textSize.height / 2),
+        withAttributes: attributes
+    )
 }
 
 func NotchFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {

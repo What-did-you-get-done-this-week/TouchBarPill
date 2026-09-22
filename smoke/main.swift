@@ -96,6 +96,43 @@ enum ZoneSmoke {
         let early = ZonePolicy.secondsUntilNextMinute(elapsed: 30)
         check(early > 20, "mid-minute wait is not one second")
 
+        let raise = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 10, precise: true, invertedFromDevice: false)
+        let lower = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: -10, precise: true, invertedFromDevice: false)
+        check((raise ?? 0) < 0, "positive wheel delta now lowers volume")
+        check((lower ?? 0) > 0, "negative wheel delta now raises volume")
+        let natural = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 10, precise: true, invertedFromDevice: true)
+        check((natural ?? 0) > 0, "natural-scroll inversion still applies before the 0.4.5 flip")
+        check(ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 0.1, precise: true, invertedFromDevice: false) == nil, "tiny precise delta is ignored")
+
+        check(ZonePolicy.wantsCrossedSpeaker(muted: true, level: 0.4), "mute crosses the speaker")
+        check(ZonePolicy.wantsCrossedSpeaker(muted: false, level: 0), "zero volume crosses the speaker")
+        check(ZonePolicy.wantsCrossedSpeaker(muted: false, level: 0.004), "rounded 0% crosses the speaker")
+        check(!ZonePolicy.wantsCrossedSpeaker(muted: false, level: 0.2), "audible volume keeps the speaker")
+        check(!ZonePolicy.wantsCrossedSpeaker(muted: false, level: nil), "unknown level is not forced silent")
+
+        let strip = CGRect(x: 100, y: 800, width: 400, height: 48)
+        let notch = CGRect(x: 250, y: 860, width: 160, height: 32)
+        check(
+            ZonePolicy.pointerOutsideChrome(mouse: CGPoint(x: 300, y: 820), rects: [strip, notch], slack: 12) == false,
+            "pointer on the strip is inside"
+        )
+        check(
+            ZonePolicy.pointerOutsideChrome(mouse: CGPoint(x: 300, y: 870), rects: [strip, notch], slack: 12) == false,
+            "pointer on the notch is inside"
+        )
+        check(
+            ZonePolicy.pointerOutsideChrome(mouse: CGPoint(x: 10, y: 10), rects: [strip, notch], slack: 12),
+            "pointer away from notch and strip is outside"
+        )
+        check(
+            ZonePolicy.pointerOutsideChrome(mouse: CGPoint(x: 90, y: 820), rects: [strip, notch], slack: 12) == false,
+            "slack keeps a near miss inside"
+        )
+        check(
+            ZonePolicy.pointerOutsideChrome(mouse: CGPoint(x: 0, y: 0), rects: [.zero], slack: 12),
+            "an empty rect does not count as chrome"
+        )
+
         if failures.isEmpty {
             print("zone-smoke ok")
         } else {
