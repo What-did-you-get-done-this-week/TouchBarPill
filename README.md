@@ -18,7 +18,7 @@ TouchBarPill uses that same class of private API, and changes the window:
 - When the tab is collapsed and idle for about 1.2 seconds, discreet mode (on by default) fades it to about 52% opacity. Hover or expand restores full opacity.
 - There is no Dock icon. A status item has Show/Hide, Display, Position, Pin expanded, notch theme and size, Start/Pause Focus, Reset Focus, Cinema mode, Preferences, Open at Login, Copy Diagnostics, and Quit. The menu-bar icon stays.
 
-Volume and brightness controls are not reimplemented. The expanded strip is the adaptive bar itself. If the stream cannot attach, the strip becomes a short message and a Try Again button instead of fake stand-in controls.
+Scroll on the collapsed notch changes system volume (CoreAudio) and double-click mutes; the notch shows a large percent or mute mark. Brightness is not reimplemented. The expanded strip is the adaptive bar itself. If the stream cannot attach, the strip becomes a short message and a Try Again button instead of fake stand-in controls.
 
 ## Requirements
 
