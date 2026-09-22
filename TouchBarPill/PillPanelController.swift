@@ -527,6 +527,8 @@ final class PillPanelController: NSObject {
         guard root.pointerOverVolume(slop: 6) else { return }
         if event.timestamp == lastScrollStamp { return }
         lastScrollStamp = event.timestamp
+        // Natural scrolling on: positive scrollingDeltaY is fingers away from
+        // the user and must raise volume. Mapping lives in volumeScrollSteps.
         guard let steps = ZonePolicy.volumeScrollSteps(
             deltaX: event.scrollingDeltaX,
             deltaY: event.scrollingDeltaY,

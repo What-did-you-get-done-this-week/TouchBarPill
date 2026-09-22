@@ -57,8 +57,23 @@ enum ZonePolicy {
     }
 
     /// Volume-wing scroll steps. Positive raises output toward 100%.
-    /// Natural trackpad scrolling is inverted from the fingers; undo that so
-    /// fingers up raises volume and fingers down lowers it.
+    ///
+    /// Physical contract, MacBook trackpad, natural scrolling ON (the default,
+    /// `invertedFromDevice == true`):
+    /// - Fingers toward the top of the trackpad, away from the user and toward
+    ///   the lid, raise system volume. The bar fills upward toward 100%.
+    /// - Fingers toward the bottom of the trackpad, toward the user, lower
+    ///   volume. The bar empties toward 0%.
+    ///
+    /// AppKit `scrollingDeltaY` is a content delta in a y-up view. Natural
+    /// scrolling already flips the device delta, so a positive `scrollingDeltaY`
+    /// is content moving up — the fingers moving away from the user. Keep that
+    /// sign. 0.4.6 negated it whenever `isDirectionInvertedFromDevice` was true,
+    /// so fingers-away lowered the volume.
+    ///
+    /// Natural scrolling off reports the legacy device delta (opposite the
+    /// fingers). Negate only that case, so fingers-away still raises. Momentum
+    /// events keep the gesture's sign (`momentumPhase` is not flipped).
     static func volumeScrollSteps(
         deltaX: CGFloat,
         deltaY: CGFloat,
@@ -67,7 +82,7 @@ enum ZonePolicy {
     ) -> Float? {
         var dx = deltaX
         var dy = deltaY
-        if invertedFromDevice {
+        if !invertedFromDevice {
             dx = -dx
             dy = -dy
         }
@@ -80,7 +95,6 @@ enum ZonePolicy {
         } else {
             raw = dominant > 0 ? 2 : -2
         }
-        // 0.4.6: keep the finger direction. 0.4.5 negated this and lowered on fingers up.
         let steps = raw
         guard abs(steps) > 0.04 else { return nil }
         return steps
@@ -147,13 +161,11 @@ enum ZonePolicy {
         var label: CGRect
         var track: CGRect
 
-        /// 0 at the wing, 1 at the interior tip.
+        /// Vertical bars: 0 at the bottom of the track (toward the user) and 1
+        /// at the top (toward the lid). Horizontal bars: 0 at the wing, 1 inward.
         func fraction(at point: CGPoint, edge: NotchEdgeKind) -> CGFloat {
             switch edge {
-            case .top:
-                guard track.height > 1 else { return 0 }
-                return clamp((track.maxY - point.y) / track.height)
-            case .bottom:
+            case .top, .bottom:
                 guard track.height > 1 else { return 0 }
                 return clamp((point.y - track.minY) / track.height)
             case .left:
@@ -165,13 +177,13 @@ enum ZonePolicy {
             }
         }
 
+        /// Vertical fill grows from the bottom of the track upward, so 0% is
+        /// empty and 100% reaches the lid end. Matches the scroll contract:
+        /// fingers away from the user fill the bar in that same direction.
         func fillRect(fraction: CGFloat, edge: NotchEdgeKind) -> CGRect {
             let amount = clamp(fraction)
             switch edge {
-            case .top:
-                let height = track.height * amount
-                return CGRect(x: track.minX, y: track.maxY - height, width: track.width, height: height)
-            case .bottom:
+            case .top, .bottom:
                 let height = track.height * amount
                 return CGRect(x: track.minX, y: track.minY, width: track.width, height: height)
             case .left:

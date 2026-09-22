@@ -1,4 +1,4 @@
-COMO ABRIR — TouchBarPill 0.4.6
+COMO ABRIR — TouchBarPill 0.4.7
 ================================
 
 Qué es
@@ -12,8 +12,7 @@ No hay ventana de Preferencias. Todo está en el menú de la barra de menú.
 Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
-2. Abre TouchBarPill-0.4.6.app (Escritorio o Descargas).
-   El TouchBarPill.app antiguo del Escritorio no se pudo sustituir: macOS bloquea modificar ese bundle (sigue en 0.4.4). No lo abras para probar 0.4.6.
+2. Abre TouchBarPill-0.4.7.app en el Escritorio.
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
 
@@ -23,7 +22,7 @@ De izquierda a derecha:
 
 - Ala izquierda = foco. En reposo es un icono de reloj (no un triángulo de play). Clic: inicia el foco.
 - Centro = «Touch Bar» cuando no hay sesión. Al pasar el puntero (breve retraso) se expande la Touch Bar adaptativa. Un clic en el centro no cambia el foco.
-- Ala derecha = volumen. Icono de altavoz. Al pasar el puntero aparece una barra de volumen anclada al ala, sin abrir la Touch Bar. La rueda cambia el volumen del sistema. Dos dedos hacia arriba suben el volumen; hacia abajo lo bajan. El % se lee en esa barra. Clic o doble clic: silencio / reactivar. A 0% o en silencio el altavoz del ala y el de la barra salen tachados.
+- Ala derecha = volumen. Icono de altavoz. Al pasar el puntero aparece una barra de volumen anclada al ala, sin abrir la Touch Bar. La rueda cambia el volumen del sistema. Con el desplazamiento natural activado, dos dedos hacia la tapa (lejos de ti) suben el volumen y la barra se llena hacia arriba; dos dedos hacia ti lo bajan y la barra se vacía hacia 0%. El % se lee en esa barra. Clic o doble clic: silencio / reactivar. A 0% o en silencio el altavoz del ala y el de la barra salen tachados.
 
 Pasar el puntero por el ala izquierda o la derecha NO abre la Touch Bar y cancela una expansión que estuviera esperando.
 
@@ -41,7 +40,7 @@ Foco
 Volumen
 -------
 - Solo el ala derecha y la barra que sale de ella.
-- Rueda, dos dedos u Opción+scroll: volumen del sistema (CoreAudio). Dos dedos hacia arriba suben el volumen; hacia abajo lo bajan. Se ve el %.
+- Rueda, dos dedos u Opción+scroll: volumen del sistema (CoreAudio). Con desplazamiento natural, dos dedos hacia la tapa suben el volumen (la barra se llena de abajo hacia arriba); hacia ti lo bajan. Se ve el %.
 - A 0% o en silencio: altavoz tachado en el ala y en la barra. Con volumen y sin silencio: altavoz normal.
 - Clic o doble clic: silencio. Otro clic: vuelve el %.
 - No pide micrófono ni Accesibilidad.
@@ -90,7 +89,7 @@ Prueba rápida
 3. Pasa el puntero por «Touch Bar»: tras un instante se abre la tira.
 4. Clic en el reloj: el centro dice 0m. El ala izquierda muestra pausa y parar. Al minuto pasa a 1m, no antes.
 5. Pausa: los minutos se quedan. Reanudar sigue. Parar vuelve a «Touch Bar» y al reloj.
-6. Hover en el altavoz: sale la barra de volumen sin abrir la Touch Bar. La rueda cambia el % (dos dedos arriba suben el volumen). A 0% o en silencio el altavoz sale tachado.
+6. Hover en el altavoz: sale la barra de volumen sin abrir la Touch Bar. La rueda cambia el % (dos dedos hacia la tapa suben el volumen y la barra se llena hacia arriba). A 0% o en silencio el altavoz sale tachado.
 7. YouTube a pantalla completa: la muesca desaparece. Tema → Invisible la oculta aunque no haya vídeo. El diagnóstico dice invisible.
 
 Nota
