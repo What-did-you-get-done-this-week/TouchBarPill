@@ -12,7 +12,7 @@ Touché proves the adaptive bar can be mirrored, including system prompts (Allow
 
 TouchBarPill uses that same class of private API, and changes the window:
 
-- Collapsed, it is a notch-style tab about 132×32 points, with its top edge flush against the chosen display. The top corners are concave ears; the bottom corners are rounded. The only label is “Touch Bar”. Drag it along that top edge, or choose Left, Center, or Right. The choice is remembered.
+- Collapsed, it is a notch-style tab about 132×32 points, with its top edge flush against the chosen display. The top corners are concave ears; the bottom corners are rounded. The only label is “Touch Bar”. Drag it along that top edge, or choose Left, Center, or Right. The choice is remembered. Hover still opens it; the expand waits a fraction of a second so a drag can start.
 - Expanded, the strip is 15% larger than the previous three-quarter mirror (scale 0.75 × 1.15), width, height, padding, and fallback type kept in proportion. It stays top-centered on the chosen display. It does not follow the notch’s X, so parking the tab in a corner does not shove the controls into the bezel.
 - Hover, or a click on the tab, expands it into a wide strip.
 - The pointer leaving the strip collapses it after 0.4 seconds. Pin expanded keeps it open until you unpin it.

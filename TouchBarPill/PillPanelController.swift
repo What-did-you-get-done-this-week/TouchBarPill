@@ -73,6 +73,7 @@ final class PillPanelController: NSObject {
     private var hovering = false
     private var dragging = false
     private var collapseItem: DispatchWorkItem?
+    private var expandItem: DispatchWorkItem?
     private var discreetItem: DispatchWorkItem?
     private var chromeGeneration = 0
 
@@ -95,6 +96,8 @@ final class PillPanelController: NSObject {
         }
         root.onEntered = { [weak self] in self?.pointerEntered() }
         root.onExited = { [weak self] in self?.pointerExited() }
+        root.onPress = { [weak self] in self?.pressBegan() }
+        root.onClick = { [weak self] in self?.clickCollapsed() }
         root.onDrag = { [weak self] x in self?.dragCollapsed(toX: x) }
         root.onDragEnd = { [weak self] in self?.finishDrag() }
         root.onRetry = { [weak self] in self?.retry() }
@@ -147,6 +150,8 @@ final class PillPanelController: NSObject {
 
     func hide() {
         collapseItem?.cancel()
+        expandItem?.cancel()
+        expandItem = nil
         discreetItem?.cancel()
         discreetItem = nil
         expanded = false
@@ -198,10 +203,43 @@ final class PillPanelController: NSObject {
         discreetItem = nil
         setOpacity(1, animated: true)
         guard !expanded, !dragging else { return }
+        // A short delay lets a press-and-drag park the tab. A plain hover
+        // still opens it. The drag loop runs in event-tracking mode, so this
+        // timer does not fire until the press ends unless it was cancelled.
+        scheduleExpand()
+    }
+
+    /// Hover-expand delay. Long enough to begin a drag, short enough that
+    /// resting the pointer still feels immediate.
+    private func scheduleExpand() {
+        expandItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.expanded, !self.dragging, self.hovering else { return }
+            self.setExpanded(true)
+        }
+        expandItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14, execute: work)
+    }
+
+    private func pressBegan() {
+        expandItem?.cancel()
+        expandItem = nil
+    }
+
+    private func clickCollapsed() {
+        hovering = true
+        expandItem?.cancel()
+        expandItem = nil
+        discreetItem?.cancel()
+        discreetItem = nil
+        setOpacity(1, animated: false)
+        guard !expanded else { return }
         setExpanded(true)
     }
 
     private func pointerExited() {
+        expandItem?.cancel()
+        expandItem = nil
         // Tracking areas fire while the window is resizing. Ignore an exit
         // that still lands inside the panel.
         if panel.frame.contains(NSEvent.mouseLocation) {
@@ -334,7 +372,7 @@ final class PillPanelController: NSObject {
         DisplayList.storeFreeX(panel.frame.origin.x, width: panel.frame.width, on: screen)
         PillPlacement.postChange()
         if panel.frame.contains(NSEvent.mouseLocation) {
-            pointerEntered()
+            clickCollapsed()
         } else {
             hovering = false
             refreshChromeOpacity(animated: true)
@@ -462,6 +500,8 @@ final class PillPanelController: NSObject {
 final class PillRootView: NSView {
     var onEntered: (() -> Void)?
     var onExited: (() -> Void)?
+    var onPress: (() -> Void)?
+    var onClick: (() -> Void)?
     var onDrag: ((CGFloat) -> Void)?
     var onDragEnd: (() -> Void)?
     var onRetry: (() -> Void)?
@@ -573,6 +613,7 @@ final class PillRootView: NSView {
             onEntered?()
             return
         }
+        onPress?()
         let startMouseX = NSEvent.mouseLocation.x
         let startFrameX = window.frame.origin.x
         var moved = false
@@ -592,7 +633,7 @@ final class PillRootView: NSView {
         if moved {
             onDragEnd?()
         } else {
-            onEntered?()
+            onClick?()
         }
     }
 
