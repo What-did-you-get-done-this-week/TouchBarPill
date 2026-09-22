@@ -2,7 +2,18 @@ import AppKit
 import QuartzCore
 
 enum PillMetrics {
+    /// Collapsed capsule. Not scaled — only its label changed.
     static let collapsedSize = NSSize(width: 132, height: 32)
+
+    /// Expanded strip only: 75% of the original 36-pt bar, proportions kept.
+    static let expandedScale: CGFloat = 0.75
+    static let streamHeight: CGFloat = 36 * expandedScale
+    static let streamPadX: CGFloat = 8 * expandedScale
+    static let streamPadY: CGFloat = 6 * expandedScale
+    static let expandedCornerRadius: CGFloat = 16 * expandedScale
+    static let fallbackCardSize = NSSize(width: 520 * expandedScale, height: 136 * expandedScale)
+    static let fallbackInset = NSSize(width: 16 * expandedScale, height: 12 * expandedScale)
+    static let minExpandedWidth: CGFloat = 320 * expandedScale
 
     /// Leave-collapse delay. Hardcoded at 0.4s unless overridden:
     /// `defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5`
@@ -47,6 +58,7 @@ final class PillPanelController: NSObject {
         root.onEntered = { [weak self] in self?.pointerEntered() }
         root.onExited = { [weak self] in self?.pointerExited() }
         root.onRetry = { [weak self] in self?.retry() }
+        root.onQuit = { NSApp.terminate(nil) }
         root.streamView.onMouse = { [weak self] event in
             guard let self, self.expanded else { return }
             self.mirror.postMouseEvent(event, in: self.root.streamView)
@@ -244,7 +256,10 @@ final class PillPanelController: NSObject {
     private func expandedFrame(on screen: NSScreen) -> NSRect {
         let gap = topGap(on: screen)
         if !mirror.hasFrame {
-            let size = NSSize(width: min(520, screen.frame.width - 48), height: 136)
+            let size = NSSize(
+                width: min(PillMetrics.fallbackCardSize.width, screen.frame.width - 48),
+                height: PillMetrics.fallbackCardSize.height
+            )
             return NSRect(
                 x: screen.frame.midX - size.width / 2,
                 y: screen.frame.maxY - size.height - gap,
@@ -254,17 +269,17 @@ final class PillPanelController: NSObject {
         }
 
         let aspect = displayAspect()
-        let maxWidth = max(320, screen.frame.width - 36)
-        let padX: CGFloat = 8
-        let padY: CGFloat = 6
-        var streamHeight: CGFloat = 36
+        let maxWidth = max(PillMetrics.minExpandedWidth, screen.frame.width - 36)
+        let padX = PillMetrics.streamPadX
+        let padY = PillMetrics.streamPadY
+        var streamHeight = PillMetrics.streamHeight
         var streamWidth = streamHeight * aspect
         if streamWidth + padX * 2 > maxWidth {
             streamWidth = maxWidth - padX * 2
             streamHeight = streamWidth / aspect
         }
         let width = streamWidth + padX * 2
-        let height = max(streamHeight + padY * 2, PillMetrics.collapsedSize.height)
+        let height = streamHeight + padY * 2
         return NSRect(
             x: screen.frame.midX - width / 2,
             y: screen.frame.maxY - height - gap,
@@ -289,6 +304,7 @@ final class PillRootView: NSView {
     var onEntered: (() -> Void)?
     var onExited: (() -> Void)?
     var onRetry: (() -> Void)?
+    var onQuit: (() -> Void)?
 
     let streamView = TouchBarStreamView(frame: .zero)
     private let chrome = CollapsedChromeView(frame: .zero)
@@ -308,6 +324,11 @@ final class PillRootView: NSView {
         addSubview(chrome)
         addSubview(fallback)
         fallback.onRetry = { [weak self] in self?.onRetry?() }
+        let present: (NSEvent) -> Void = { [weak self] event in
+            self?.presentQuitMenu(with: event)
+        }
+        streamView.onContextMenu = present
+        fallback.onContextMenu = present
     }
 
     @available(*, unavailable)
@@ -321,7 +342,6 @@ final class PillRootView: NSView {
 
     func apply(mirror: DFRMirror, expanded: Bool) {
         self.expanded = expanded
-        chrome.isLive = mirror.hasFrame
         chrome.needsDisplay = true
         fallback.title = mirror.simulatorReady ? "Touch Bar" : "Touch Bar unavailable"
         fallback.message = mirror.statusMessage
@@ -338,9 +358,9 @@ final class PillRootView: NSView {
     override func layout() {
         super.layout()
         updateCornerRadius()
-        streamView.frame = bounds.insetBy(dx: 8, dy: 6)
+        streamView.frame = bounds.insetBy(dx: PillMetrics.streamPadX, dy: PillMetrics.streamPadY)
         chrome.frame = bounds
-        fallback.frame = bounds.insetBy(dx: 16, dy: 12)
+        fallback.frame = bounds.insetBy(dx: PillMetrics.fallbackInset.width, dy: PillMetrics.fallbackInset.height)
         fallback.layoutSubtreeIfNeeded()
     }
 
@@ -368,58 +388,67 @@ final class PillRootView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.control) {
+            presentQuitMenu(with: event)
+            return
+        }
         if !expanded {
             onEntered?()
         }
     }
 
+    override func rightMouseDown(with event: NSEvent) {
+        presentQuitMenu(with: event)
+    }
+
+    private func presentQuitMenu(with event: NSEvent) {
+        let menu = NSMenu()
+        let quit = NSMenuItem(title: "Quit TouchBarPill", action: #selector(performQuit(_:)), keyEquivalent: "")
+        quit.target = self
+        menu.addItem(quit)
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func performQuit(_ sender: Any?) {
+        onQuit?()
+    }
+
     private func updateCornerRadius() {
-        let radius: CGFloat = expanded ? min(16, bounds.height / 2) : bounds.height / 2
+        let radius: CGFloat = expanded ? min(PillMetrics.expandedCornerRadius, bounds.height / 2) : bounds.height / 2
         layer?.cornerRadius = radius
     }
 }
 
-/// Glyph, “TB”, and a live dot. Draws nothing interactive; hits fall through.
+/// Centered “Touch Bar” label only. Draws nothing interactive; hits fall through.
 final class CollapsedChromeView: NSView {
-    var isLive = false
-
     override var isOpaque: Bool { false }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
+    override func isAccessibilityElement() -> Bool { !isHidden }
+
+    override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
+
+    override func accessibilityLabel() -> String? { isHidden ? nil : "Touch Bar" }
+
     override func draw(_ dirtyRect: NSRect) {
-        let icon = NSRect(x: 16, y: (bounds.height - 12) / 2, width: 26, height: 12)
-        let outline = NSBezierPath(roundedRect: icon, xRadius: 4, yRadius: 4)
-        NSColor.white.withAlphaComponent(0.92).setStroke()
-        outline.lineWidth = 1.25
-        outline.stroke()
-
-        NSColor.white.withAlphaComponent(0.92).setFill()
-        let segmentY = icon.midY - 2
-        for index in 0..<3 {
-            let segment = NSRect(x: icon.minX + 4 + CGFloat(index) * 6.2, y: segmentY, width: 4.2, height: 4)
-            NSBezierPath(roundedRect: segment, xRadius: 1, yRadius: 1).fill()
-        }
-
-        let title = "TB" as NSString
+        let title = "Touch Bar" as NSString
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
             .foregroundColor: NSColor.white.withAlphaComponent(0.94),
-            .kern: 0.4,
         ]
         let textSize = title.size(withAttributes: attributes)
-        let textOrigin = NSPoint(x: icon.maxX + 8, y: floor((bounds.height - textSize.height) / 2))
-        title.draw(at: textOrigin, withAttributes: attributes)
-
-        let dotAlpha: CGFloat = isLive ? 0.92 : 0.28
-        NSColor.white.withAlphaComponent(dotAlpha).setFill()
-        let dot = NSRect(x: bounds.width - 18, y: (bounds.height - 5) / 2, width: 5, height: 5)
-        NSBezierPath(ovalIn: dot).fill()
+        let origin = NSPoint(
+            x: floor((bounds.width - textSize.width) / 2),
+            y: floor((bounds.height - textSize.height) / 2)
+        )
+        title.draw(at: origin, withAttributes: attributes)
     }
 }
 
 final class FallbackView: NSView {
     var onRetry: (() -> Void)?
+    var onContextMenu: ((NSEvent) -> Void)?
 
     private let titleField = NSTextField(labelWithString: "Touch Bar")
     private let bodyField = NSTextField(wrappingLabelWithString: "")
@@ -467,6 +496,18 @@ final class FallbackView: NSView {
         let bodyHeight = max(0, bounds.height - 48)
         bodyField.frame = NSRect(x: 0, y: 28, width: width, height: bodyHeight)
         bodyField.preferredMaxLayoutWidth = width
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.control) {
+            onContextMenu?(event)
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        onContextMenu?(event)
     }
 
     @objc private func retry(_ sender: NSButton) {

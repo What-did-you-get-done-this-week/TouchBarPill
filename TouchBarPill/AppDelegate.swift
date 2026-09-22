@@ -1,8 +1,9 @@
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-    private var statusItem: NSStatusItem!
+    private var statusItem: NSStatusItem?
     private var showItem: NSMenuItem!
+    private var didTeardown = false
     private var mirror: DFRMirror!
     private var pill: PillPanelController!
     private let preferences = PreferencesController()
@@ -26,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        mirror?.stop()
+        teardown()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -38,10 +39,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func buildStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = Self.statusImage()
-        statusItem.button?.imagePosition = .imageOnly
-        statusItem.button?.toolTip = "TouchBarPill"
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = Self.statusImage()
+        item.button?.imagePosition = .imageOnly
+        item.button?.toolTip = "TouchBarPill — click to quit"
 
         let menu = NSMenu()
         menu.delegate = self
@@ -63,11 +64,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit TouchBarPill", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        quitItem.target = NSApp
+        let quitItem = NSMenuItem(title: "Quit TouchBarPill", action: #selector(quit(_:)), keyEquivalent: "q")
+        quitItem.target = self
         menu.addItem(quitItem)
 
-        statusItem.menu = menu
+        // Left-click (and right-click) on the status item opens this menu.
+        // LSUIElement hides the application menu, so this is the Quit path.
+        item.menu = menu
+        statusItem = item
+    }
+
+    /// Stop the Touch Bar stream and remove the status item before exit.
+    private func teardown() {
+        guard !didTeardown else { return }
+        didTeardown = true
+        pill?.hide()
+        mirror?.stop()
+        if let statusItem {
+            NSStatusBar.system.removeStatusItem(statusItem)
+            self.statusItem = nil
+        }
+    }
+
+    @objc private func quit(_ sender: Any?) {
+        NSApp.terminate(sender)
     }
 
     private func mirrorChanged() {

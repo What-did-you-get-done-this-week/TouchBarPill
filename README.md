@@ -12,7 +12,8 @@ Touché proves the adaptive bar can be mirrored, including system prompts (Allow
 
 TouchBarPill uses that same class of private API, and changes the window:
 
-- Collapsed, it is a capsule about 132×32 points, parked on the top edge, centered on the current screen.
+- Collapsed, it is a capsule about 132×32 points, parked on the top edge, centered on the current screen. The only label is “Touch Bar”.
+- Expanded, the strip is about 75% of the original Touch Bar mirror, width and height, proportions kept.
 - Hover, or a click on the capsule, expands it into a wide strip.
 - The pointer leaving the strip collapses it after 0.4 seconds.
 - There is no Dock icon. A status item has Show/Hide, Preferences, Copy Diagnostics, and Quit.
@@ -65,12 +66,12 @@ killall TouchBarPill
 
 ## What you should see
 
-1. A black capsule at the top center of the screen that has the pointer. It shows a small Touch Bar glyph, the letters TB, and a dim dot.
-2. Moving the pointer onto it grows a wide black strip. The dot turns solid white once frames arrive.
+1. A black capsule at the top center of the screen that has the pointer. Collapsed, it shows only the words Touch Bar.
+2. Moving the pointer onto it grows a black strip about three quarters the width and height of the original bar, proportions kept.
 3. The strip shows the same adaptive Touch Bar the frontmost app would draw: Control Strip, function keys, Allow / Don’t Allow, and so on.
 4. Clicking a button in the strip activates that button. Try a Control Strip control, or a button in an app that puts real actions on the Touch Bar.
 5. Leaving the strip collapses it after about 0.4 seconds. Moving back onto it cancels the collapse.
-6. The status-item menu can hide the pill. That choice is remembered.
+6. Click the status item for Show/Hide and Quit TouchBarPill. Right-click (or Control-click) the pill for Quit as well. Hide is remembered.
 
 While collapsed, the pill follows the screen under the pointer. It is not dragged. On a notched display the pill sits just below the menu bar so the notch does not cover it. Touch Bar MacBook Pros have no notch; the pill sits in the menu-bar band.
 

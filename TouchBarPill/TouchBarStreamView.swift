@@ -4,6 +4,7 @@ import AppKit
 /// Hidden while the pill is collapsed, so it does not eat hover hits.
 final class TouchBarStreamView: NSView {
     var onMouse: ((NSEvent) -> Void)?
+    var onContextMenu: ((NSEvent) -> Void)?
     private var tracking: NSTrackingArea?
 
     override init(frame frameRect: NSRect) {
@@ -37,12 +38,18 @@ final class TouchBarStreamView: NSView {
         tracking = area
     }
 
-    override func mouseDown(with event: NSEvent) { forward(event) }
+    override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.control) {
+            onContextMenu?(event)
+            return
+        }
+        forward(event)
+    }
     override func mouseUp(with event: NSEvent) { forward(event) }
     override func mouseDragged(with event: NSEvent) { forward(event) }
-    override func rightMouseDown(with event: NSEvent) { forward(event) }
-    override func rightMouseUp(with event: NSEvent) { forward(event) }
-    override func rightMouseDragged(with event: NSEvent) { forward(event) }
+    override func rightMouseDown(with event: NSEvent) { onContextMenu?(event) }
+    override func rightMouseUp(with event: NSEvent) {}
+    override func rightMouseDragged(with event: NSEvent) {}
     override func otherMouseDown(with event: NSEvent) { forward(event) }
     override func otherMouseUp(with event: NSEvent) { forward(event) }
     override func otherMouseDragged(with event: NSEvent) { forward(event) }
