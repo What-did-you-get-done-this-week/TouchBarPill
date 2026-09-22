@@ -70,8 +70,10 @@ final class PillPanelController: NSObject {
     private let root: PillRootView
     private var expanded = false
     private var animating = false
+    private var hovering = false
+    private var dragging = false
     private var collapseItem: DispatchWorkItem?
-    private var screenTimer: Timer?
+    private var discreetItem: DispatchWorkItem?
     private var chromeGeneration = 0
 
     var isVisible: Bool { panel.isVisible }
@@ -93,6 +95,8 @@ final class PillPanelController: NSObject {
         }
         root.onEntered = { [weak self] in self?.pointerEntered() }
         root.onExited = { [weak self] in self?.pointerExited() }
+        root.onDrag = { [weak self] x in self?.dragCollapsed(toX: x) }
+        root.onDragEnd = { [weak self] in self?.finishDrag() }
         root.onRetry = { [weak self] in self?.retry() }
         root.onQuit = { NSApp.terminate(nil) }
         root.streamView.onMouse = { [weak self] event in
@@ -100,53 +104,61 @@ final class PillPanelController: NSObject {
             self.mirror.postMouseEvent(event, in: self.root.streamView)
         }
         mirror.attachStream(to: root.streamView)
-        if let screen = screenUnderMouse() ?? NSScreen.main ?? NSScreen.screens.first {
+        if let screen = DisplayList.resolved() {
             panel.setFrame(collapsedFrame(on: screen), display: false)
         }
         root.apply(mirror: mirror, expanded: false)
-        screenTimer = Timer(timeInterval: 0.8, repeats: true) { [weak self] _ in
-            self?.followScreen()
-        }
-        if let screenTimer {
-            RunLoop.main.add(screenTimer, forMode: .common)
-        }
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(screensChanged),
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(placementChanged),
+            name: PillPlacement.didChange,
+            object: nil
+        )
     }
 
     deinit {
-        screenTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
     }
 
     func show() {
-        if let screen = screenUnderMouse() ?? screenForPanel() {
-            panel.setFrame(collapsedFrame(on: screen), display: false)
-        }
-        expanded = false
-        root.apply(mirror: mirror, expanded: false)
+        guard let screen = DisplayList.resolved() else { return }
+        collapseItem?.cancel()
+        let pinned = PillPlacement.pinExpanded
+        expanded = pinned
+        hovering = false
+        panel.alphaValue = 1
+        panel.setFrame(pinned ? expandedFrame(on: screen) : collapsedFrame(on: screen), display: false)
+        root.apply(mirror: mirror, expanded: pinned)
         panel.orderFrontRegardless()
         panel.invalidateShadow()
         root.updateTrackingAreas()
-        if panel.frame.contains(NSEvent.mouseLocation) {
+        if !pinned && panel.frame.contains(NSEvent.mouseLocation) {
             pointerEntered()
+        } else {
+            refreshChromeOpacity(animated: false)
         }
     }
 
     func hide() {
         collapseItem?.cancel()
+        discreetItem?.cancel()
+        discreetItem = nil
         expanded = false
+        hovering = false
         root.apply(mirror: mirror, expanded: false)
+        panel.alphaValue = 1
         panel.orderOut(nil)
     }
 
     func mirrorStateChanged() {
         root.apply(mirror: mirror, expanded: expanded)
-        guard expanded, let screen = screenForPanel() else { return }
+        guard expanded, let screen = DisplayList.resolved() else { return }
         let target = expandedFrame(on: screen)
         guard panel.frame != target else { return }
         animate(to: target, expanding: true)
@@ -180,13 +192,29 @@ final class PillPanelController: NSObject {
     }
 
     private func pointerEntered() {
+        hovering = true
         collapseItem?.cancel()
-        guard !expanded else { return }
+        discreetItem?.cancel()
+        discreetItem = nil
+        setOpacity(1, animated: true)
+        guard !expanded, !dragging else { return }
         setExpanded(true)
     }
 
     private func pointerExited() {
-        guard expanded else { return }
+        // Tracking areas fire while the window is resizing. Ignore an exit
+        // that still lands inside the panel.
+        if panel.frame.contains(NSEvent.mouseLocation) {
+            hovering = true
+            return
+        }
+        hovering = false
+        guard expanded else {
+            refreshChromeOpacity(animated: true)
+            return
+        }
+        // Pinned stays open. The pointer can leave.
+        guard !PillPlacement.pinExpanded else { return }
         scheduleCollapse()
     }
 
@@ -194,6 +222,7 @@ final class PillPanelController: NSObject {
         collapseItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            if PillPlacement.pinExpanded { return }
             if self.panel.frame.contains(NSEvent.mouseLocation) {
                 return
             }
@@ -207,10 +236,16 @@ final class PillPanelController: NSObject {
         collapseItem?.cancel()
         let was = expanded
         expanded = expand
-        guard let screen = screenForPanel() ?? screenUnderMouse() ?? NSScreen.main else { return }
+        guard let screen = DisplayList.resolved() else { return }
         let target = expand ? expandedFrame(on: screen) : collapsedFrame(on: screen)
         root.apply(mirror: mirror, expanded: expand)
+        if expand || hovering || dragging {
+            discreetItem?.cancel()
+            discreetItem = nil
+            setOpacity(1, animated: false)
+        }
         if was == expand && panel.frame == target {
+            refreshChromeOpacity(animated: true)
             return
         }
         animate(to: target, expanding: expand)
@@ -234,8 +269,10 @@ final class PillPanelController: NSObject {
             self.panel.invalidateShadow()
             if !expanding && !self.panel.frame.contains(NSEvent.mouseLocation) {
                 self.expanded = false
+                self.hovering = false
                 self.root.apply(mirror: self.mirror, expanded: false)
             }
+            self.refreshChromeOpacity(animated: true)
         }
     }
 
@@ -245,25 +282,103 @@ final class PillPanelController: NSObject {
     }
 
     @objc private func screensChanged() {
-        followScreen()
+        applyPlacementChange()
     }
 
-    private func followScreen() {
-        guard panel.isVisible, !expanded, !animating else { return }
-        guard let screen = screenUnderMouse() else { return }
-        let target = collapsedFrame(on: screen)
-        guard panel.frame != target else { return }
-        panel.setFrame(target, display: true)
-        panel.invalidateShadow()
+    @objc private func placementChanged() {
+        applyPlacementChange()
     }
 
-    private func screenUnderMouse() -> NSScreen? {
-        let location = NSEvent.mouseLocation
-        return NSScreen.screens.first { NSMouseInRect(location, $0.frame, false) }
+    /// Move onto the chosen display, honor pin, and refresh idle opacity.
+    /// Dragging owns the frame until mouse-up, so this waits.
+    private func applyPlacementChange() {
+        guard !dragging, panel.isVisible else { return }
+        guard let screen = DisplayList.resolved() else { return }
+
+        if PillPlacement.pinExpanded {
+            collapseItem?.cancel()
+            if !expanded {
+                setExpanded(true)
+                return
+            }
+        }
+
+        let target = expanded ? expandedFrame(on: screen) : collapsedFrame(on: screen)
+        if panel.frame != target {
+            animate(to: target, expanding: expanded)
+        }
+
+        if !PillPlacement.pinExpanded && expanded && !hovering && !panel.frame.contains(NSEvent.mouseLocation) {
+            scheduleCollapse()
+        }
+        refreshChromeOpacity(animated: true)
     }
 
-    private func screenForPanel() -> NSScreen? {
-        NSScreen.screens.first { $0.frame.intersects(panel.frame) } ?? NSScreen.main
+    private func dragCollapsed(toX x: CGFloat) {
+        dragging = true
+        collapseItem?.cancel()
+        discreetItem?.cancel()
+        discreetItem = nil
+        setOpacity(1, animated: false)
+        guard let screen = DisplayList.resolved() else { return }
+        var frame = collapsedFrame(on: screen)
+        frame.origin.x = DisplayList.clamp(x, width: frame.width, on: screen)
+        panel.setFrame(frame, display: true)
+    }
+
+    private func finishDrag() {
+        // Clear before posting so the placement observer can refresh opacity.
+        // The frame is already where the drag left it.
+        dragging = false
+        guard let screen = DisplayList.resolved() else { return }
+        DisplayList.storeFreeX(panel.frame.origin.x, width: panel.frame.width, on: screen)
+        PillPlacement.postChange()
+        if panel.frame.contains(NSEvent.mouseLocation) {
+            pointerEntered()
+        } else {
+            hovering = false
+            refreshChromeOpacity(animated: true)
+        }
+    }
+
+    private func refreshChromeOpacity(animated: Bool) {
+        let wantsFull = expanded || hovering || dragging || !PillPlacement.discreetMode
+        if wantsFull {
+            discreetItem?.cancel()
+            discreetItem = nil
+            setOpacity(1, animated: animated && !dragging)
+            return
+        }
+        // Already faded: a new opacity level applies immediately.
+        if panel.alphaValue < 0.98 {
+            discreetItem?.cancel()
+            discreetItem = nil
+            setOpacity(PillPlacement.discreetOpacity, animated: animated)
+            return
+        }
+        guard discreetItem == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.discreetItem = nil
+            guard !self.expanded, !self.hovering, !self.dragging, PillPlacement.discreetMode else { return }
+            self.setOpacity(PillPlacement.discreetOpacity, animated: true)
+        }
+        discreetItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + PillPlacement.idleDelay, execute: work)
+    }
+
+    private func setOpacity(_ alpha: CGFloat, animated: Bool) {
+        if abs(panel.alphaValue - alpha) < 0.01 { return }
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if !animated || reduceMotion {
+            panel.alphaValue = alpha
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.45
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().alphaValue = alpha
+        }
     }
 
     private func topGap(on screen: NSScreen) -> CGFloat {
@@ -281,16 +396,22 @@ final class PillPanelController: NSObject {
 
     private func collapsedFrame(on screen: NSScreen) -> NSRect {
         let size = PillMetrics.collapsedSize
-        // Flush with the physical top. The notch path's straight edge is the
-        // window's top edge, so no menu-bar gap here. Expanded still uses topGap.
+        // Flush with the physical top of the chosen display. Horizontal
+        // position is the saved anchor. The notch path's straight edge is
+        // the window's top edge, so there is no menu-bar gap here.
+        let x = DisplayList.collapsedOriginX(width: size.width, on: screen)
         return NSRect(
-            x: screen.frame.midX - size.width / 2,
+            x: x,
             y: screen.frame.maxY - size.height,
             width: size.width,
             height: size.height
         )
     }
 
+    /// The expanded strip stays top-centered on the chosen display. It does
+    /// not slide under the notch: a wide Touch Bar parked in a corner would
+    /// clamp into the bezel, and the controls would jump every time the tab
+    /// moves. Collapsing returns the tab to its saved X.
     private func expandedFrame(on screen: NSScreen) -> NSRect {
         let gap = topGap(on: screen)
         if !mirror.hasFrame {
@@ -341,6 +462,8 @@ final class PillPanelController: NSObject {
 final class PillRootView: NSView {
     var onEntered: (() -> Void)?
     var onExited: (() -> Void)?
+    var onDrag: ((CGFloat) -> Void)?
+    var onDragEnd: (() -> Void)?
     var onRetry: (() -> Void)?
     var onQuit: (() -> Void)?
 
@@ -439,7 +562,36 @@ final class PillRootView: NSView {
             presentQuitMenu(with: event)
             return
         }
-        if !showsExpandedShape {
+        guard !showsExpandedShape else { return }
+        trackClickOrDrag()
+    }
+
+    /// A small click expands. A horizontal drag parks the collapsed notch
+    /// and does not expand until the pointer is released on top of it.
+    private func trackClickOrDrag() {
+        guard let window else {
+            onEntered?()
+            return
+        }
+        let startMouseX = NSEvent.mouseLocation.x
+        let startFrameX = window.frame.origin.x
+        var moved = false
+        while let next = window.nextEvent(
+            matching: [.leftMouseDragged, .leftMouseUp],
+            until: .distantFuture,
+            inMode: .eventTracking,
+            dequeue: true
+        ) {
+            if next.type == .leftMouseUp { break }
+            let dx = NSEvent.mouseLocation.x - startMouseX
+            if abs(dx) > 3 {
+                moved = true
+                onDrag?(startFrameX + dx)
+            }
+        }
+        if moved {
+            onDragEnd?()
+        } else {
             onEntered?()
         }
     }

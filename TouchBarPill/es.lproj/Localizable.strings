@@ -31,7 +31,24 @@
 "Opening at login requires macOS 13 or later." = "Abrir al iniciar sesión requiere macOS 13 o posterior.";
 "Could not update the login item: %@" = "No se pudo cambiar el ítem de inicio: %@";
 "Display" = "Pantalla";
-"While collapsed, the tab follows the screen under the pointer. There is no pin-to-display control yet." = "Plegada, la pestaña sigue la pantalla que está bajo el puntero. Todavía no hay un control para fijarla a una pantalla.";
+"Built-in" = "Integrada";
+"Display %d" = "Pantalla %d";
+"No displays" = "No hay pantallas";
+"Position" = "Posición";
+"Left" = "Izquierda";
+"Center" = "Centro";
+"Right" = "Derecha";
+"Custom" = "Personalizada";
+"Pin expanded" = "Fijar expandida";
+"Discreet mode" = "Modo discreto";
+"Idle opacity" = "Opacidad en reposo";
+"none" = "ninguna";
+"A black tab sits flush with the top of the display you choose. Drag it along that edge, or pick Left, Center, or Right. Hover to open the Touch Bar. The expanded strip stays centered on that display. Move away and it folds back, unless it is pinned." = "Una pestaña negra queda pegada al borde superior de la pantalla que elijas. Arrástrala por ese borde, o elige Izquierda, Centro o Derecha. Pasa el puntero para abrir la Touch Bar. La tira expandida se queda centrada en esa pantalla. Al salir se pliega, salvo que esté fijada.";
+"The tab and the expanded strip use the top edge of this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns." = "La pestaña y la tira usan el borde superior de esta pantalla. Si la desconectas, TouchBarPill usa la integrada, o la principal, hasta que vuelva.";
+"That display is unplugged. Showing the built-in display, or the main display, until it is back. The choice is remembered." = "Esa pantalla está desconectada. Se muestra la integrada, o la principal, hasta que vuelva. La elección se recuerda.";
+"Drag the collapsed tab along the top edge. Left, Center, and Right park it on that display. The expanded strip stays top-centered on the same display, not under the tab." = "Arrastra la pestaña plegada por el borde superior. Izquierda, Centro y Derecha la colocan en esa pantalla. La tira expandida se queda centrada arriba en la misma pantalla, no debajo de la pestaña.";
+"When on, the strip stays open until you turn this off. Leaving with the pointer does not collapse it." = "Activado, la tira sigue abierta hasta que lo quites. Salir con el puntero no la contrae.";
+"When the tab is collapsed and idle, it fades. Hover or expand brings it back to full opacity. On by default." = "Plegada y en reposo, la pestaña se atenúa. Al pasar el puntero o al expandir vuelve a opaca. Activado por omisión.";
 
 /* Diagnósticos */
 "Screens:" = "Pantallas:";

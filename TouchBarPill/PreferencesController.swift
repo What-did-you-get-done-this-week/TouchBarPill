@@ -1,7 +1,7 @@
 import AppKit
 
-/// Preferences reports the live stream, the collapse delay, and the login item.
-/// The delay itself is still a defaults key, not a slider.
+/// Preferences for the stream, collapse delay, login item, display, position,
+/// pin, and discreet mode. The collapse delay itself is still a defaults key.
 final class PreferencesController: NSWindowController {
     private let statusTitle = NSTextField(labelWithString: L("Stream"))
     private let statusBody = NSTextField(wrappingLabelWithString: L("Starting…"))
@@ -9,12 +9,19 @@ final class PreferencesController: NSWindowController {
     private let loginSwitch = NSSwitch()
     private let loginNote = NSTextField(wrappingLabelWithString: "")
     private let loginSettingsButton = NSButton(title: L("Open Login Items Settings"), target: nil, action: nil)
-    private var loginButtonHeight: NSLayoutConstraint?
+    private let displayPopup = NSPopUpButton()
+    private let displayNote = NSTextField(wrappingLabelWithString: "")
+    private let positionPopup = NSPopUpButton()
+    private let pinSwitch = NSSwitch()
+    private let discreetSwitch = NSSwitch()
+    private let opacitySlider = NSSlider()
+    private let opacityReadout = NSTextField(labelWithString: "")
     private var mirror: DFRMirror?
+    private var suppressUI = false
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 560),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -23,6 +30,16 @@ final class PreferencesController: NSWindowController {
         window.isReleasedWhenClosed = false
         self.init(window: window)
         buildContent()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(placementChanged),
+            name: PillPlacement.didChange,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     func attach(mirror: DFRMirror) {
@@ -43,6 +60,7 @@ final class PreferencesController: NSWindowController {
     }
 
     func refresh() {
+        reloadPlacementControls()
         guard let mirror else { return }
         statusTitle.stringValue = mirror.simulatorReady ? L("Stream") : L("Stream unavailable")
         statusBody.stringValue = mirror.statusMessage
@@ -56,29 +74,54 @@ final class PreferencesController: NSWindowController {
         loginSwitch.state = LaunchAtLogin.isOn ? .on : .off
         loginSwitch.isEnabled = LaunchAtLogin.isSupported
         loginNote.stringValue = LaunchAtLogin.note()
-        let showSettings = LaunchAtLogin.needsSettingsButton
-        loginSettingsButton.isHidden = !showSettings
-        loginButtonHeight?.constant = showSettings ? 28 : 0
+        loginSettingsButton.isHidden = !LaunchAtLogin.needsSettingsButton
     }
 
     private func buildContent() {
         guard let content = window?.contentView else { return }
-        let inset = NSLayoutGuide()
-        content.addLayoutGuide(inset)
+
+        let scroll = NSScrollView()
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        scroll.borderType = .noBorder
+        content.addSubview(scroll)
+
+        let document = NSView()
+        document.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = document
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(stack)
+
         NSLayoutConstraint.activate([
-            inset.topAnchor.constraint(equalTo: content.topAnchor, constant: 8),
-            inset.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
-            inset.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
-            inset.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+            scroll.topAnchor.constraint(equalTo: content.topAnchor),
+            scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            scroll.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+
+            document.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            document.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            document.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor),
+            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+
+            stack.topAnchor.constraint(equalTo: document.topAnchor, constant: 18),
+            stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -20),
+            stack.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -20),
         ])
 
         let heading = NSTextField(labelWithString: "TouchBarPill")
         heading.font = .systemFont(ofSize: 18, weight: .semibold)
 
-        let intro = NSTextField(wrappingLabelWithString: L("A black tab sits on the top edge of the screen. Hover it to open the live adaptive Touch Bar, then move away and it folds back into the tab."))
+        let intro = note(L("A black tab sits flush with the top of the display you choose. Drag it along that edge, or pick Left, Center, or Right. Hover to open the Touch Bar. The expanded strip stays centered on that display. Move away and it folds back, unless it is pinned."))
         intro.font = .systemFont(ofSize: 12)
         intro.textColor = .secondaryLabelColor
-        intro.preferredMaxLayoutWidth = 440
 
         statusTitle.font = .systemFont(ofSize: 13, weight: .semibold)
         statusBody.font = .systemFont(ofSize: 12)
@@ -86,17 +129,12 @@ final class PreferencesController: NSWindowController {
         statusBody.maximumNumberOfLines = 4
         statusBody.preferredMaxLayoutWidth = 440
 
-        let delayLabel = NSTextField(labelWithString: L("Collapse delay"))
-        delayLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        let delayLabel = sectionLabel(L("Collapse delay"))
         delayValue.font = .systemFont(ofSize: 12)
         delayValue.textColor = .secondaryLabelColor
-        let delayNote = NSTextField(wrappingLabelWithString: L("Fixed for this version. Change it without rebuilding: defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5"))
-        delayNote.font = .systemFont(ofSize: 11)
-        delayNote.textColor = .tertiaryLabelColor
-        delayNote.preferredMaxLayoutWidth = 440
+        let delayNote = note(L("Fixed for this version. Change it without rebuilding: defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5"))
 
-        let loginLabel = NSTextField(labelWithString: L("Open at login"))
-        loginLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        let loginLabel = sectionLabel(L("Open at login"))
         loginSwitch.target = self
         loginSwitch.action = #selector(loginSwitchChanged(_:))
         loginSwitch.setAccessibilityLabel(L("Open at login"))
@@ -108,74 +146,175 @@ final class PreferencesController: NSWindowController {
         loginSettingsButton.target = self
         loginSettingsButton.action = #selector(openLoginSettings(_:))
         loginSettingsButton.isHidden = true
-        loginButtonHeight = loginSettingsButton.heightAnchor.constraint(equalToConstant: 0)
 
-        let displayLabel = NSTextField(labelWithString: L("Display"))
-        displayLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        let displayNote = NSTextField(wrappingLabelWithString: L("While collapsed, the tab follows the screen under the pointer. There is no pin-to-display control yet."))
+        let displayLabel = sectionLabel(L("Display"))
+        displayPopup.target = self
+        displayPopup.action = #selector(displayChanged(_:))
+        displayPopup.setAccessibilityLabel(L("Display"))
         displayNote.font = .systemFont(ofSize: 11)
         displayNote.textColor = .tertiaryLabelColor
         displayNote.preferredMaxLayoutWidth = 440
+        displayNote.maximumNumberOfLines = 3
+
+        let positionLabel = sectionLabel(L("Position"))
+        positionPopup.target = self
+        positionPopup.action = #selector(positionChanged(_:))
+        positionPopup.setAccessibilityLabel(L("Position"))
+        let positionNote = note(L("Drag the collapsed tab along the top edge. Left, Center, and Right park it on that display. The expanded strip stays top-centered on the same display, not under the tab."))
+
+        let pinLabel = sectionLabel(L("Pin expanded"))
+        pinSwitch.target = self
+        pinSwitch.action = #selector(pinChanged(_:))
+        pinSwitch.setAccessibilityLabel(L("Pin expanded"))
+        let pinNote = note(L("When on, the strip stays open until you turn this off. Leaving with the pointer does not collapse it."))
+
+        let discreetLabel = sectionLabel(L("Discreet mode"))
+        discreetSwitch.target = self
+        discreetSwitch.action = #selector(discreetChanged(_:))
+        discreetSwitch.setAccessibilityLabel(L("Discreet mode"))
+        let discreetNote = note(L("When the tab is collapsed and idle, it fades. Hover or expand brings it back to full opacity. On by default."))
+
+        let opacityLabel = sectionLabel(L("Idle opacity"))
+        opacitySlider.minValue = 0.35
+        opacitySlider.maxValue = 0.75
+        opacitySlider.doubleValue = PillPlacement.defaultOpacity
+        opacitySlider.isContinuous = true
+        opacitySlider.target = self
+        opacitySlider.action = #selector(opacityChanged(_:))
+        opacitySlider.setAccessibilityLabel(L("Idle opacity"))
+        opacitySlider.widthAnchor.constraint(equalToConstant: 160).isActive = true
+        opacityReadout.font = .systemFont(ofSize: 12)
+        opacityReadout.textColor = .secondaryLabelColor
+        opacityReadout.alignment = .right
+        opacityReadout.widthAnchor.constraint(equalToConstant: 40).isActive = true
 
         let copy = NSButton(title: L("Copy Diagnostics"), target: self, action: #selector(copyDiagnostics))
         copy.bezelStyle = .rounded
 
-        let views: [NSView] = [heading, intro, statusTitle, statusBody, delayLabel, delayValue, delayNote, loginLabel, loginSwitch, loginNote, loginSettingsButton, displayLabel, displayNote, copy]
-        for view in views {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            content.addSubview(view)
+        let rows = [
+            labeledRow(delayLabel, delayValue),
+            labeledRow(loginLabel, loginSwitch),
+            labeledRow(displayLabel, displayPopup),
+            labeledRow(positionLabel, positionPopup),
+            labeledRow(pinLabel, pinSwitch),
+            labeledRow(discreetLabel, discreetSwitch),
+            labeledRow(opacityLabel, opacityCluster()),
+        ]
+        stack.addArrangedSubview(heading)
+        stack.addArrangedSubview(intro)
+        stack.addArrangedSubview(statusTitle)
+        stack.addArrangedSubview(statusBody)
+        stack.addArrangedSubview(rows[0])
+        stack.addArrangedSubview(delayNote)
+        stack.addArrangedSubview(rows[1])
+        stack.addArrangedSubview(loginNote)
+        stack.addArrangedSubview(loginSettingsButton)
+        stack.addArrangedSubview(rows[2])
+        stack.addArrangedSubview(displayNote)
+        stack.addArrangedSubview(rows[3])
+        stack.addArrangedSubview(positionNote)
+        stack.addArrangedSubview(rows[4])
+        stack.addArrangedSubview(pinNote)
+        stack.addArrangedSubview(rows[5])
+        stack.addArrangedSubview(discreetNote)
+        stack.addArrangedSubview(rows[6])
+        stack.addArrangedSubview(copy)
+        for row in rows {
+            row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
 
-        NSLayoutConstraint.activate([
-            heading.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
-            heading.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-            heading.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
+        for view in [intro, statusBody, delayNote, loginNote, displayNote, positionNote, pinNote, discreetNote] {
+            view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
+        reloadPlacementControls()
+    }
 
-            intro.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 6),
-            intro.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-            intro.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
+    private func opacityCluster() -> NSView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        row.addArrangedSubview(opacitySlider)
+        row.addArrangedSubview(opacityReadout)
+        return row
+    }
 
-            statusTitle.topAnchor.constraint(equalTo: intro.bottomAnchor, constant: 16),
-            statusTitle.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-            statusTitle.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
+    private func sectionLabel(_ title: String) -> NSTextField {
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        return label
+    }
 
-            statusBody.topAnchor.constraint(equalTo: statusTitle.bottomAnchor, constant: 2),
-            statusBody.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-            statusBody.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
+    private func note(_ text: String) -> NSTextField {
+        let field = NSTextField(wrappingLabelWithString: text)
+        field.font = .systemFont(ofSize: 11)
+        field.textColor = .tertiaryLabelColor
+        field.preferredMaxLayoutWidth = 440
+        field.maximumNumberOfLines = 4
+        return field
+    }
 
-            delayLabel.topAnchor.constraint(equalTo: statusBody.bottomAnchor, constant: 14),
-            delayLabel.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-            delayValue.centerYAnchor.constraint(equalTo: delayLabel.centerYAnchor),
-            delayValue.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
+    private func labeledRow(_ label: NSView, _ control: NSView) -> NSStackView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 12
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        row.addArrangedSubview(label)
+        row.addArrangedSubview(spacer)
+        row.addArrangedSubview(control)
+        return row
+    }
 
-            delayNote.topAnchor.constraint(equalTo: delayLabel.bottomAnchor, constant: 2),
-            delayNote.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-            delayNote.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
+    @objc private func placementChanged() {
+        reloadPlacementControls()
+    }
 
-            loginLabel.topAnchor.constraint(equalTo: delayNote.bottomAnchor, constant: 14),
-            loginLabel.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-            loginSwitch.centerYAnchor.constraint(equalTo: loginLabel.centerYAnchor),
-            loginSwitch.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
+    private func reloadPlacementControls() {
+        suppressUI = true
+        defer { suppressUI = false }
 
-            loginNote.topAnchor.constraint(equalTo: loginLabel.bottomAnchor, constant: 2),
-            loginNote.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-            loginNote.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
+        displayPopup.removeAllItems()
+        let resolvedID = DisplayList.resolved().map { DisplayList.id(of: $0) }
+        for entry in DisplayList.entries() {
+            let ident = DisplayList.id(of: entry.screen)
+            displayPopup.addItem(withTitle: entry.title)
+            displayPopup.lastItem?.tag = Int(ident)
+        }
+        if let resolvedID {
+            displayPopup.selectItem(withTag: Int(resolvedID))
+        }
+        if PillPlacement.preferredDisplayIsConnected {
+            displayNote.stringValue = L("The tab and the expanded strip use the top edge of this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns.")
+        } else {
+            displayNote.stringValue = L("That display is unplugged. Showing the built-in display, or the main display, until it is back. The choice is remembered.")
+        }
 
-            loginSettingsButton.topAnchor.constraint(equalTo: loginNote.bottomAnchor, constant: 8),
-            loginSettingsButton.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-            loginButtonHeight!,
+        positionPopup.removeAllItems()
+        positionPopup.addItem(withTitle: L("Left"))
+        positionPopup.lastItem?.tag = 0
+        positionPopup.addItem(withTitle: L("Center"))
+        positionPopup.lastItem?.tag = 1
+        positionPopup.addItem(withTitle: L("Right"))
+        positionPopup.lastItem?.tag = 2
+        if PillPlacement.isPurePreset {
+            switch PillPlacement.anchor {
+            case .leading: positionPopup.selectItem(withTag: 0)
+            case .center: positionPopup.selectItem(withTag: 1)
+            case .trailing: positionPopup.selectItem(withTag: 2)
+            }
+        } else {
+            positionPopup.addItem(withTitle: L("Custom"))
+            positionPopup.lastItem?.tag = -1
+            positionPopup.selectItem(withTag: -1)
+        }
 
-            displayLabel.topAnchor.constraint(equalTo: loginSettingsButton.bottomAnchor, constant: 12),
-            displayLabel.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-            displayLabel.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
-
-            displayNote.topAnchor.constraint(equalTo: displayLabel.bottomAnchor, constant: 2),
-            displayNote.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-            displayNote.trailingAnchor.constraint(equalTo: inset.trailingAnchor),
-
-            copy.topAnchor.constraint(equalTo: displayNote.bottomAnchor, constant: 16),
-            copy.leadingAnchor.constraint(equalTo: inset.leadingAnchor),
-        ])
+        pinSwitch.state = PillPlacement.pinExpanded ? .on : .off
+        discreetSwitch.state = PillPlacement.discreetMode ? .on : .off
+        opacitySlider.isEnabled = PillPlacement.discreetMode
+        opacitySlider.doubleValue = Double(PillPlacement.discreetOpacity)
+        opacityReadout.stringValue = "\(Int((PillPlacement.discreetOpacity * 100).rounded()))%"
     }
 
     @objc private func loginSwitchChanged(_ sender: NSSwitch) {
@@ -188,6 +327,43 @@ final class PreferencesController: NSWindowController {
 
     @objc private func openLoginSettings(_ sender: NSButton) {
         LaunchAtLogin.openSettings()
+    }
+
+    @objc private func displayChanged(_ sender: NSPopUpButton) {
+        guard !suppressUI, let item = sender.selectedItem, item.tag > 0 else { return }
+        PillPlacement.preferredDisplayID = CGDirectDisplayID(item.tag)
+        PillPlacement.postChange()
+    }
+
+    @objc private func positionChanged(_ sender: NSPopUpButton) {
+        guard !suppressUI, let item = sender.selectedItem, item.tag >= 0 else { return }
+        let anchor: PillAnchor
+        switch item.tag {
+        case 0: anchor = .leading
+        case 2: anchor = .trailing
+        default: anchor = .center
+        }
+        PillPlacement.storeAnchor(anchor)
+        PillPlacement.postChange()
+    }
+
+    @objc private func pinChanged(_ sender: NSSwitch) {
+        guard !suppressUI else { return }
+        PillPlacement.pinExpanded = sender.state == .on
+        PillPlacement.postChange()
+    }
+
+    @objc private func discreetChanged(_ sender: NSSwitch) {
+        guard !suppressUI else { return }
+        PillPlacement.discreetMode = sender.state == .on
+        PillPlacement.postChange()
+    }
+
+    @objc private func opacityChanged(_ sender: NSSlider) {
+        guard !suppressUI else { return }
+        PillPlacement.discreetOpacity = CGFloat(sender.doubleValue)
+        opacityReadout.stringValue = "\(Int((sender.doubleValue * 100).rounded()))%"
+        PillPlacement.postChange()
     }
 
     @objc private func copyDiagnostics() {

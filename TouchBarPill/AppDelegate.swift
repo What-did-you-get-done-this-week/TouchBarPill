@@ -4,6 +4,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var showItem: NSMenuItem!
     private var loginItem: NSMenuItem!
+    private var pinItem: NSMenuItem!
+    private var discreetItem: NSMenuItem!
+    private let displayMenu = NSMenu()
+    private let positionMenu = NSMenu()
     private var didTeardown = false
     private var mirror: DFRMirror!
     private var pill: PillPanelController!
@@ -42,6 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         showItem.title = pill.isVisible ? L("Hide Touch Bar") : L("Show Touch Bar")
         loginItem.title = LaunchAtLogin.menuTitle()
         loginItem.state = LaunchAtLogin.isOn ? .on : .off
+        pinItem.state = PillPlacement.pinExpanded ? .on : .off
+        discreetItem.state = PillPlacement.discreetMode ? .on : .off
+        rebuildDisplayMenu()
+        rebuildPositionMenu()
     }
 
     private func buildStatusItem() {
@@ -57,6 +65,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         showItem.keyEquivalentModifierMask = [.command, .shift]
         showItem.target = self
         menu.addItem(showItem)
+
+        menu.addItem(.separator())
+
+        let displayItem = NSMenuItem(title: L("Display"), action: nil, keyEquivalent: "")
+        displayItem.submenu = displayMenu
+        menu.addItem(displayItem)
+
+        let positionItem = NSMenuItem(title: L("Position"), action: nil, keyEquivalent: "")
+        positionItem.submenu = positionMenu
+        menu.addItem(positionItem)
+
+        pinItem = NSMenuItem(title: L("Pin expanded"), action: #selector(togglePin), keyEquivalent: "")
+        pinItem.target = self
+        menu.addItem(pinItem)
+
+        discreetItem = NSMenuItem(title: L("Discreet mode"), action: #selector(toggleDiscreet), keyEquivalent: "")
+        discreetItem.target = self
+        menu.addItem(discreetItem)
 
         menu.addItem(.separator())
 
@@ -120,6 +146,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         preferences.show()
     }
 
+    @objc private func togglePin() {
+        PillPlacement.pinExpanded.toggle()
+        PillPlacement.postChange()
+    }
+
+    @objc private func toggleDiscreet() {
+        PillPlacement.discreetMode.toggle()
+        PillPlacement.postChange()
+    }
+
+    @objc private func chooseDisplay(_ sender: NSMenuItem) {
+        let ident = CGDirectDisplayID(sender.tag)
+        guard ident != 0 else { return }
+        PillPlacement.preferredDisplayID = ident
+        PillPlacement.postChange()
+    }
+
+    @objc private func chooseAnchor(_ sender: NSMenuItem) {
+        let anchor: PillAnchor
+        switch sender.tag {
+        case 0: anchor = .leading
+        case 2: anchor = .trailing
+        default: anchor = .center
+        }
+        PillPlacement.storeAnchor(anchor)
+        PillPlacement.postChange()
+    }
+
+    private func rebuildDisplayMenu() {
+        displayMenu.removeAllItems()
+        let resolvedID = DisplayList.resolved().map { DisplayList.id(of: $0) }
+        for entry in DisplayList.entries() {
+            let ident = DisplayList.id(of: entry.screen)
+            let item = NSMenuItem(title: entry.title, action: #selector(chooseDisplay(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = Int(ident)
+            item.state = ident == resolvedID ? .on : .off
+            displayMenu.addItem(item)
+        }
+        if displayMenu.items.isEmpty {
+            let empty = NSMenuItem(title: L("No displays"), action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            displayMenu.addItem(empty)
+        }
+    }
+
+    private func rebuildPositionMenu() {
+        positionMenu.removeAllItems()
+        let specs: [(String, PillAnchor, Int)] = [
+            (L("Left"), .leading, 0),
+            (L("Center"), .center, 1),
+            (L("Right"), .trailing, 2),
+        ]
+        for (title, anchor, tag) in specs {
+            let item = NSMenuItem(title: title, action: #selector(chooseAnchor(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = tag
+            let selected = PillPlacement.anchor == anchor && PillPlacement.isPurePreset
+            item.state = selected ? .on : .off
+            positionMenu.addItem(item)
+        }
+    }
+
     @objc private func toggleLaunchAtLogin() {
         let outcome = LaunchAtLogin.setEnabled(!LaunchAtLogin.isOn)
         loginItem.state = LaunchAtLogin.isOn ? .on : .off
@@ -159,11 +248,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             )
         }.joined(separator: "\n")
 
+        let resolved = DisplayList.resolved()
+        let resolvedID = resolved.map { Int(DisplayList.id(of: $0)) } ?? 0
+        let resolvedName = resolved?.localizedName ?? L("none")
+        let saved = PillPlacement.preferredDisplayID.map { String(Int($0)) } ?? "auto"
+        let fallback = PillPlacement.preferredDisplayIsConnected ? "no" : "yes"
+
         return """
         TouchBarPill \(version) (\(build))
         \(ProcessInfo.processInfo.operatingSystemVersionString)
         CollapseDelay: \(PillMetrics.collapseDelay)
         PillHidden: \(UserDefaults.standard.bool(forKey: "PillHidden"))
+        PreferredDisplayID: \(saved)
+        ResolvedDisplay: \(resolvedName) id=\(resolvedID) fallback=\(fallback)
+        Anchor: \(PillPlacement.anchor.rawValue) offset \(String(format: "%.1f", Double(PillPlacement.offset)))
+        PinExpanded: \(PillPlacement.pinExpanded)
+        DiscreetMode: \(PillPlacement.discreetMode) opacity \(String(format: "%.2f", Double(PillPlacement.discreetOpacity))) idle \(String(format: "%.2f", PillPlacement.idleDelay))
+        ExpandedPlacement: top-center of the chosen display
         \(LaunchAtLogin.diagnosticLine())
         \(mirror.diagnosticSummary())
         \(L("Screens:"))

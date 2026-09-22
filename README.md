@@ -1,6 +1,6 @@
 # TouchBarPill
 
-TouchBarPill is a menu-bar utility for a Mac whose Touch Bar still receives taps but no longer draws. Collapsed, it is a black tab flush with the top center of the screen. Hover the tab and it expands into the live adaptive Touch Bar. Move the pointer away and, after a short delay, it collapses. Menus follow the system language (English and Spanish). Opening at login stays off until you turn it on.
+TouchBarPill is a menu-bar utility for a Mac whose Touch Bar still receives taps but no longer draws. Collapsed, it is a black tab flush with the top edge of the display you choose. Hover the tab and it expands into the live adaptive Touch Bar, top-centered on that same display. Move the pointer away and, after a short delay, it collapses, unless you pin it open. After a short idle it fades. Menus follow the system language (English and Spanish). Opening at login stays off until you turn it on.
 
 The picture is not a screenshot. Frames come from the same private Touch Bar simulator interface that open-source simulators use, and clicks are posted back into that simulator so the real buttons fire. The physical OLED does not have to work. macOS still renders the bar on the host, which is why Touché can mirror it.
 
@@ -12,11 +12,12 @@ Touché proves the adaptive bar can be mirrored, including system prompts (Allow
 
 TouchBarPill uses that same class of private API, and changes the window:
 
-- Collapsed, it is a notch-style tab about 132×32 points, centered, with its top edge flush against the screen. The top corners are concave ears; the bottom corners are rounded. The only label is “Touch Bar”.
-- Expanded, the strip is 15% larger than the previous three-quarter mirror (scale 0.75 × 1.15), width, height, padding, and fallback type kept in proportion.
+- Collapsed, it is a notch-style tab about 132×32 points, with its top edge flush against the chosen display. The top corners are concave ears; the bottom corners are rounded. The only label is “Touch Bar”. Drag it along that top edge, or choose Left, Center, or Right. The choice is remembered.
+- Expanded, the strip is 15% larger than the previous three-quarter mirror (scale 0.75 × 1.15), width, height, padding, and fallback type kept in proportion. It stays top-centered on the chosen display. It does not follow the notch’s X, so parking the tab in a corner does not shove the controls into the bezel.
 - Hover, or a click on the tab, expands it into a wide strip.
-- The pointer leaving the strip collapses it after 0.4 seconds.
-- There is no Dock icon. A status item has Show/Hide, Preferences, Open at Login, Copy Diagnostics, and Quit. The menu-bar icon stays.
+- The pointer leaving the strip collapses it after 0.4 seconds. Pin expanded keeps it open until you unpin it.
+- When the tab is collapsed and idle for about 1.2 seconds, discreet mode (on by default) fades it to about 52% opacity. Hover or expand restores full opacity.
+- There is no Dock icon. A status item has Show/Hide, Display, Position, Pin expanded, Discreet mode, Preferences, Open at Login, Copy Diagnostics, and Quit. The menu-bar icon stays.
 
 Volume and brightness controls are not reimplemented. The expanded strip is the adaptive bar itself. If the stream cannot attach, the strip becomes a short message and a Try Again button instead of fake stand-in controls.
 
@@ -66,14 +67,15 @@ killall TouchBarPill
 
 ## What you should see
 
-1. A black tab at the top center of the screen that has the pointer. Its top edge meets the screen edge, with concave ears at the top corners and rounded bottom corners. Collapsed, it shows only the words Touch Bar.
-2. Moving the pointer onto it grows a black strip about 15% larger than the previous three-quarter bar, proportions kept.
+1. A black tab on the top edge of the chosen display (by default the built-in display, or the main display). Its top edge meets the screen edge, with concave ears at the top corners and rounded bottom corners. Collapsed, it shows only the words Touch Bar.
+2. Moving the pointer onto it grows a black strip about 15% larger than the previous three-quarter bar, proportions kept. The strip is centered on that display’s top edge, even if the tab itself sits to the left or right.
 3. The strip shows the same adaptive Touch Bar the frontmost app would draw: Control Strip, function keys, Allow / Don’t Allow, and so on.
 4. Clicking a button in the strip activates that button. Try a Control Strip control, or a button in an app that puts real actions on the Touch Bar.
-5. Leaving the strip collapses it after about 0.4 seconds. Moving back onto it cancels the collapse.
-6. Click the status item for Show/Hide, Open at Login, and Quit TouchBarPill. Right-click (or Control-click) the tab for Quit as well. Hide is remembered. The status-item icon is still the capsule with three dots.
+5. Leaving the strip collapses it after about 0.4 seconds. Moving back onto it cancels the collapse. Pin expanded skips that collapse until you turn the pin off.
+6. After the collapsed tab sits idle for about 1.2 seconds, it fades. Hovering or expanding brings it back to full opacity. Discreet mode can be turned off.
+7. Click the status item for Show/Hide, Display, Position, Pin expanded, Discreet mode, Open at Login, and Quit TouchBarPill. Right-click (or Control-click) the tab for Quit as well. Hide is remembered. The status-item icon is still the capsule with three dots.
 
-While collapsed, the tab follows the screen under the pointer and stays flush with that screen’s top edge. It is not dragged. On a notched display the collapsed tab still meets the top edge; the expanded strip sits just below the menu bar so the notch does not cover the controls.
+The tab stays on the display you pick. It does not follow the pointer onto another screen. If that display is unplugged, the tab moves to the built-in display, or the main display, and returns when the saved display is back. Drag the collapsed tab horizontally to park it; it stays flush with the top and cannot leave the display. On a notched display the collapsed tab still meets the top edge; the expanded strip sits just below the menu bar so the notch does not cover the controls.
 
 The panel is non-activating and borderless, joins every Space, and is marked `fullScreenAuxiliary` so it can remain visible over full-screen apps. Its window level is one step above status items, which keeps it under pop-up menus. Clicks must not activate TouchBarPill. If they did, the adaptive bar would switch to this app’s empty Touch Bar.
 
@@ -129,6 +131,16 @@ defaults write com.touchbarpill.TouchBarPill CollapseDelay -float 0.5
 defaults write com.touchbarpill.TouchBarPill TouchBarPointWidth -float 1085
 defaults write com.touchbarpill.TouchBarPill TouchBarPointHeight -float 30
 
+# How long the collapsed tab stays fully opaque before discreet mode
+# fades it. Default 1.2 seconds. Clamped to 0.3...8.
+defaults write com.touchbarpill.TouchBarPill DiscreetIdleDelay -float 1.2
+
+# Idle opacity, 0.35...0.75. Default 0.52. Preferences has the same slider.
+defaults write com.touchbarpill.TouchBarPill DiscreetOpacity -float 0.52
+
+# Discreet mode. On when the key is missing.
+defaults write com.touchbarpill.TouchBarPill DiscreetMode -bool YES
+
 # AppKit is y-up, which matches the on-screen simulator. Turn this on
 # if a control reacts as if you clicked its vertical opposite.
 # Most Touch Bar buttons are full height, so this rarely matters.
@@ -153,22 +165,25 @@ This is a private API. Apple does not document it and has already moved it once.
 
 ## What is in this milestone, and what is not
 
-In this version:
+In this version (0.3.0):
 
 - Menu-bar agent, no Dock icon, Show/Hide, Quit, Preferences. The status item stays.
-- Top-center notch tab, hover expand, leave-to-collapse with a 0.4 second delay.
-- Expanded strip 15% larger than the previous 0.75 scale.
+- Notch tab on a chosen display, hover expand, leave-to-collapse with a 0.4 second delay.
+- Display submenu and a Preferences popup. The saved display id is kept if that screen is unplugged; the tab falls back to the built-in display, or the main display.
+- Horizontal position: drag the collapsed notch, or Left / Center / Right. Stored as an anchor plus an offset, and clamped to the display.
+- Expanded strip 15% larger than the previous 0.75 scale, top-centered on the chosen display (not aligned under the notch).
+- Pin expanded, in the status menu and in Preferences. While pinned, hover-leave does not collapse.
+- Discreet mode, on by default. The collapsed idle tab fades. Preferences can set the opacity.
 - Open at login, off by default. The status menu and Preferences can turn it on with `SMAppService` (macOS 13+). Launch does not register it.
 - English and Spanish from the system language.
 - Live gen-3 display stream, with clicks forwarded through `DFRTouchBarSimulatorPostEventWithMouseActivity`.
 - A real message when the stream cannot attach, plus Try Again.
-- The tab follows the screen under the pointer while it is collapsed.
 
 Not in this version:
 
-- A control to pin the tab to one display. It always follows the pointer while collapsed.
+- A warning when Touché is also running.
+- A focus hub, Control Center, notarization, Developer ID signing, Sparkle, or a disk image.
 - A slider for the collapse delay. The delay is fixed at 0.4 seconds unless the `defaults` key is set. Preferences only displays the value.
-- Notarization, Developer ID signing, and Sparkle.
 - Custom volume or brightness buttons. Those were left out on purpose so a failed stream is obvious.
 
 ## Layout
@@ -178,7 +193,8 @@ TouchBarPill.xcodeproj          Xcode project and shared scheme
 TouchBarPill/main.swift         NSApplication, accessory policy
 TouchBarPill/AppDelegate.swift  Status item, diagnostics
 TouchBarPill/PillPanelController.swift
-                                Panel, hover, frames, notch-tab drawing
+                                Panel, hover, frames, notch-tab drawing, drag
+TouchBarPill/Placement.swift    Display, anchor, pin, discreet opacity
 TouchBarPill/TouchBarStreamView.swift
                                 Pointer forwarding into the strip
 TouchBarPill/PreferencesController.swift

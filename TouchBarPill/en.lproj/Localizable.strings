@@ -31,7 +31,24 @@
 "Opening at login requires macOS 13 or later." = "Opening at login requires macOS 13 or later.";
 "Could not update the login item: %@" = "Could not update the login item: %@";
 "Display" = "Display";
-"While collapsed, the tab follows the screen under the pointer. There is no pin-to-display control yet." = "While collapsed, the tab follows the screen under the pointer. There is no pin-to-display control yet.";
+"Built-in" = "Built-in";
+"Display %d" = "Display %d";
+"No displays" = "No displays";
+"Position" = "Position";
+"Left" = "Left";
+"Center" = "Center";
+"Right" = "Right";
+"Custom" = "Custom";
+"Pin expanded" = "Pin expanded";
+"Discreet mode" = "Discreet mode";
+"Idle opacity" = "Idle opacity";
+"none" = "none";
+"A black tab sits flush with the top of the display you choose. Drag it along that edge, or pick Left, Center, or Right. Hover to open the Touch Bar. The expanded strip stays centered on that display. Move away and it folds back, unless it is pinned." = "A black tab sits flush with the top of the display you choose. Drag it along that edge, or pick Left, Center, or Right. Hover to open the Touch Bar. The expanded strip stays centered on that display. Move away and it folds back, unless it is pinned.";
+"The tab and the expanded strip use the top edge of this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns." = "The tab and the expanded strip use the top edge of this display. If you unplug it, TouchBarPill uses the built-in display, or the main display, until it returns.";
+"That display is unplugged. Showing the built-in display, or the main display, until it is back. The choice is remembered." = "That display is unplugged. Showing the built-in display, or the main display, until it is back. The choice is remembered.";
+"Drag the collapsed tab along the top edge. Left, Center, and Right park it on that display. The expanded strip stays top-centered on the same display, not under the tab." = "Drag the collapsed tab along the top edge. Left, Center, and Right park it on that display. The expanded strip stays top-centered on the same display, not under the tab.";
+"When on, the strip stays open until you turn this off. Leaving with the pointer does not collapse it." = "When on, the strip stays open until you turn this off. Leaving with the pointer does not collapse it.";
+"When the tab is collapsed and idle, it fades. Hover or expand brings it back to full opacity. On by default." = "When the tab is collapsed and idle, it fades. Hover or expand brings it back to full opacity. On by default.";
 
 /* Diagnostics */
 "Screens:" = "Screens:";
