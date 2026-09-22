@@ -48,7 +48,15 @@ final class PreferencesController: NSWindowController {
 
     private func buildContent() {
         guard let content = window?.contentView else { return }
-        content.layoutMargins = NSEdgeInsets(top: 8, left: 20, bottom: 20, right: 20)
+        // AppKit's layoutMarginsGuide is read-only; NSView has no layoutMargins setter.
+        let inset = NSLayoutGuide()
+        content.addLayoutGuide(inset)
+        NSLayoutConstraint.activate([
+            inset.topAnchor.constraint(equalTo: content.topAnchor, constant: 8),
+            inset.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            inset.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
+            inset.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+        ])
 
         let heading = NSTextField(labelWithString: "TouchBarPill")
         heading.font = .systemFont(ofSize: 18, weight: .semibold)
@@ -96,7 +104,6 @@ final class PreferencesController: NSWindowController {
             content.addSubview(view)
         }
 
-        let inset = content.layoutMarginsGuide
         NSLayoutConstraint.activate([
             heading.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
             heading.leadingAnchor.constraint(equalTo: inset.leadingAnchor),

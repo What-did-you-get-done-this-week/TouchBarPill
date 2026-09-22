@@ -225,7 +225,8 @@ final class PillPanelController: NSObject {
 
     private func hasNotch(_ screen: NSScreen) -> Bool {
         if #available(macOS 12.0, *) {
-            return screen.auxiliaryTopLeftArea.width > 0 || screen.safeAreaInsets.top > 0
+            let auxiliaryWidth = screen.auxiliaryTopLeftArea?.width ?? 0
+            return auxiliaryWidth > 0 || screen.safeAreaInsets.top > 0
         }
         return false
     }

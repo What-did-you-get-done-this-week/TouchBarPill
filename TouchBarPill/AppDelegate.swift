@@ -100,7 +100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let screens = NSScreen.screens.enumerated().map { index, screen in
             let notch: String
             if #available(macOS 12.0, *) {
-                notch = (screen.auxiliaryTopLeftArea.width > 0 || screen.safeAreaInsets.top > 0) ? "notch" : "no-notch"
+                let auxiliaryWidth = screen.auxiliaryTopLeftArea?.width ?? 0
+                notch = (auxiliaryWidth > 0 || screen.safeAreaInsets.top > 0) ? "notch" : "no-notch"
             } else {
                 notch = "notch-unknown"
             }
