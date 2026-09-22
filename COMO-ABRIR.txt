@@ -12,8 +12,8 @@ No hay ventana de Preferencias. Todo está en el menú de la barra de menú.
 Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
-2. Abre TouchBarPill.app o TouchBarPill-0.4.5.app (Escritorio), o la copia TouchBarPill-0.4.5.app en Descargas.
-   Si macOS bloquea sobrescribir un .app antiguo, cierra TouchBarPill antes (menú → Salir).
+2. Abre TouchBarPill-0.4.5.app (Escritorio o Descargas).
+   El TouchBarPill.app antiguo del Escritorio no se pudo sustituir: macOS bloquea modificar ese bundle (sigue en 0.4.4). No lo abras para probar 0.4.5.
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
 
