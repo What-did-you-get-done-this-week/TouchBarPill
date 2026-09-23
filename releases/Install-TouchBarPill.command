@@ -40,27 +40,31 @@ remove_app() {
 	echo "No pude borrar ${path}." >&2
 	return 0
 }
+TARGET="${DESKTOP}/TouchBarPill.app"
+FALLBACK="${DESKTOP}/TouchBarPill-0.5.0.app"
+
 shopt -s nullglob
 for old in "${DESKTOP}"/TouchBarPill*.app; do
-	[[ "${old}" == "${DESKTOP}/TouchBarPill.app" ]] && continue
+	[[ "${old}" == "${TARGET}" || "${old}" == "${FALLBACK}" ]] && continue
 	remove_app "${old}"
 done
 for ver in 0.3.{0..9} 0.4.{0..12}; do
 	remove_app "${DESKTOP}/TouchBarPill-${ver}.app"
 done
 
-TARGET="${DESKTOP}/TouchBarPill.app"
-if ! ditto "${BUILD}" "${TARGET}"; then
-	echo "No pude sustituir ${TARGET}." >&2
-	if [[ ! -d "${TARGET}" ]]; then
-		FALLBACK="${DESKTOP}/TouchBarPill-0.5.0.app"
-		ditto "${BUILD}" "${FALLBACK}"
-		xattr -dr com.apple.quarantine "${FALLBACK}" >/dev/null 2>&1 || true
-		open "${FALLBACK}"
-		echo "Quedó ${FALLBACK}. Ábrela, o vuelve a lanzar este comando desde el Escritorio." >&2
-		exit 1
-	fi
+if ditto "${BUILD}" "${TARGET}"; then
+	xattr -dr com.apple.quarantine "${TARGET}" >/dev/null 2>&1 || true
+	open "${TARGET}"
+	echo "Instalada ${TARGET}"
+	exit 0
 fi
-xattr -dr com.apple.quarantine "${TARGET}" >/dev/null 2>&1 || true
-open "${TARGET}"
-echo "Instalada ${TARGET}"
+
+echo "No pude sustituir ${TARGET}." >&2
+if ditto "${BUILD}" "${FALLBACK}"; then
+	xattr -dr com.apple.quarantine "${FALLBACK}" >/dev/null 2>&1 || true
+	open "${FALLBACK}"
+	echo "Quedó ${FALLBACK}." >&2
+	exit 0
+fi
+echo "No pude instalar ni ${TARGET} ni ${FALLBACK}." >&2
+exit 1
