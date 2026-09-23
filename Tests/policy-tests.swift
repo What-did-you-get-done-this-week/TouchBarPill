@@ -105,8 +105,12 @@ enum PolicyTests {
             ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 0.1, precise: true, invertedFromDevice: true) == nil,
             "tiny precise delta is ignored"
         )
-        let awayAcross = ZonePolicy.volumeScrollSteps(deltaX: -10, deltaY: 0, precise: true, invertedFromDevice: true)
-        check(awayAcross == away, "horizontal scroll on the mirrored speaker uses the volume-wing sign")
+        let right = ZonePolicy.volumeScrollSteps(deltaX: 10, deltaY: 0, precise: true, invertedFromDevice: true)
+        let left = ZonePolicy.volumeScrollSteps(deltaX: -10, deltaY: 0, precise: true, invertedFromDevice: true)
+        check(right == away, "scroll right raises volume, same as fingers away")
+        check(left == toward, "scroll left lowers volume, same as fingers toward you")
+        let rightNaturalOff = ZonePolicy.volumeScrollSteps(deltaX: -10, deltaY: 0, precise: true, invertedFromDevice: false)
+        check(rightNaturalOff == right, "natural scrolling off keeps a rightward finger as a raise")
 
         let track = CGRect(x: 10, y: 20, width: 12, height: 80)
         let geometry = ZonePolicy.SliderGeometry(
@@ -294,8 +298,12 @@ enum PolicyTests {
         check((towardBright ?? 0) < 0, "fingers toward you lower brightness")
         check(
             awayBright == ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: -10, precise: true, invertedFromDevice: true),
-            "brightness scroll uses the volume-wing sign"
+            "brightness up and down use the volume-wing sign"
         )
+        let rightBright = ZonePolicy.brightnessScrollSteps(deltaX: 10, deltaY: 0, precise: true, invertedFromDevice: true)
+        let leftBright = ZonePolicy.brightnessScrollSteps(deltaX: -10, deltaY: 0, precise: true, invertedFromDevice: true)
+        check(rightBright == right, "scroll right raises brightness")
+        check(leftBright == left, "scroll left lowers brightness")
         check(
             ZonePolicy.brightnessScrollSteps(deltaX: 0, deltaY: 0.1, precise: true, invertedFromDevice: true) == nil,
             "tiny brightness scroll is ignored"

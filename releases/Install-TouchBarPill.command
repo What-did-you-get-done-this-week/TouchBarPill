@@ -41,7 +41,7 @@ remove_app() {
 	return 0
 }
 TARGET="${DESKTOP}/TouchBarPill.app"
-FALLBACK="${DESKTOP}/TouchBarPill-0.5.5.app"
+FALLBACK="${DESKTOP}/TouchBarPill-0.5.6.app"
 
 shopt -s nullglob
 for old in "${DESKTOP}"/TouchBarPill*.app; do

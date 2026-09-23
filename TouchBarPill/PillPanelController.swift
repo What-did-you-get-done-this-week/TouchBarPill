@@ -574,7 +574,7 @@ final class PillPanelController: NSObject {
     }
 
     /// Scroll on the mirrored brightness button. Clicks still go to the simulator.
-    /// Fingers away from you raise brightness, same sign as the volume wing.
+    /// Up and right raise brightness. Down and left lower it. Same helper as volume.
     /// A sun that cannot be told apart from the speaker is a no-op.
     private func scrollExpandedBrightness(_ event: NSEvent) {
         guard expanded, pointerOverBrightness() else { return }
@@ -590,8 +590,8 @@ final class PillPanelController: NSObject {
     }
 
     /// Scroll on the mirrored Control Strip speaker. Clicks still go to the simulator.
-    /// Any axis uses the notch volume-wing mapping: fingers away raise volume,
-    /// fingers toward you lower it. The wing itself is not shown or changed.
+    /// Up and right raise volume. Down and left lower it. Same helper as the wing.
+    /// The wing slider is not shown from this path.
     private func scrollExpandedVolume(_ event: NSEvent) {
         guard expanded, pointerOverMirroredVolume() else { return }
         guard let steps = ZonePolicy.volumeScrollSteps(

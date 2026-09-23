@@ -177,14 +177,21 @@ enum ZonePolicy {
 
     /// Volume-wing scroll steps. Positive raises output toward 100%.
     ///
-    /// With natural scrolling on, fingers toward the top of the trackpad (away
-    /// from the user, toward the lid) produce a negative `scrollingDeltaY` and
-    /// raise volume. Fingers toward the user produce a positive delta and lower
-    /// it. The bar fills upward toward 100% and empties toward 0%.
+    /// Up raises and down lowers. With natural scrolling on, fingers toward
+    /// the top of the trackpad (away from the user, toward the lid) produce a
+    /// negative `scrollingDeltaY` and raise volume. Fingers toward the user
+    /// produce a positive delta and lower it. The bar fills upward toward 100%
+    /// and empties toward 0%.
     ///
-    /// Natural scrolling off undoes the device inversion first. One extra
-    /// negation is the last step, so it is not applied twice. Momentum events
-    /// keep the gesture's sign (`momentumPhase` is not flipped).
+    /// Right raises and left lowers. That is the opposite of treating
+    /// `scrollingDeltaX` like `scrollingDeltaY`: a positive horizontal delta
+    /// (fingers to the right, natural scrolling on) raises, and a negative one
+    /// lowers. The mirrored brightness and volume buttons use this same helper.
+    ///
+    /// Natural scrolling off undoes the device inversion first, then the
+    /// horizontal flip still applies, so the same finger direction wins.
+    /// One extra negation is the last step, so it is not applied twice.
+    /// Momentum events keep the gesture's sign (`momentumPhase` is not flipped).
     static func volumeScrollSteps(
         deltaX: CGFloat,
         deltaY: CGFloat,
@@ -197,6 +204,7 @@ enum ZonePolicy {
             dx = -dx
             dy = -dy
         }
+        dx = -dx
         let dominant = abs(dy) >= abs(dx) ? dy : dx
         let minDelta: CGFloat = precise ? 0.35 : 0.01
         guard abs(dominant) >= minDelta else { return nil }
@@ -213,10 +221,9 @@ enum ZonePolicy {
 
     /// Control Strip brightness scroll. Positive raises the built-in display.
     ///
-    /// The sign matches `volumeScrollSteps`. With natural scrolling on, two
-    /// fingers toward the top of the trackpad (away from you, toward the lid)
-    /// are a negative `scrollingDeltaY` and increase brightness. Two fingers
-    /// toward you decrease it. Natural scrolling off undoes that once.
+    /// Same mapping as `volumeScrollSteps` and the notch wing: up and right
+    /// raise, down and left lower. Natural scrolling off undoes the device
+    /// inversion once inside that helper.
     static func brightnessScrollSteps(
         deltaX: CGFloat,
         deltaY: CGFloat,

@@ -1,4 +1,4 @@
-COMO ABRIR — TouchBarPill 0.5.5
+COMO ABRIR — TouchBarPill 0.5.6
 ================================
 
 Qué es
@@ -12,7 +12,7 @@ No hay ventana de Preferencias. Todo está en el menú de la barra de menú.
 Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
-2. Abre TouchBarPill.app en el Escritorio (una sola app, versión 0.5.5).
+2. Abre TouchBarPill.app en el Escritorio (una sola app, versión 0.5.6).
    Si quedan copias TouchBarPill-0.4.x.app, o no se puede sustituir TouchBarPill.app, abre Install-TouchBarPill.command en el Escritorio: cierra TouchBarPill, borra las TouchBarPill*.app viejas, copia la build a TouchBarPill.app y la abre.
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
@@ -23,7 +23,7 @@ De izquierda a derecha:
 
 - Ala izquierda = foco. En reposo es un icono de reloj (no un triángulo de play). Clic: inicia el foco.
 - Centro = «Touch Bar» cuando no hay sesión. Al pasar el puntero (breve retraso) se expande la Touch Bar adaptativa. Un clic en el centro no cambia el foco.
-- Ala derecha = volumen. Icono de altavoz. Al pasar el puntero aparece una barra de volumen anclada al ala, sin abrir la Touch Bar. La rueda cambia el volumen del sistema. Con el desplazamiento natural activado, dos dedos hacia la tapa (lejos de ti) suben el volumen y la barra se llena hacia arriba; dos dedos hacia ti lo bajan y la barra se vacía hacia 0%. El % se lee en esa barra. Clic o doble clic: silencio / reactivar. A 0% o en silencio el altavoz del ala y el de la barra salen tachados.
+- Ala derecha = volumen. Icono de altavoz. Al pasar el puntero aparece una barra de volumen anclada al ala, sin abrir la Touch Bar. La rueda cambia el volumen del sistema. Arriba y a la derecha suben el volumen; abajo y a la izquierda lo bajan. Con el desplazamiento natural activado, dos dedos hacia la tapa (lejos de ti) suben el volumen y la barra se llena hacia arriba; dos dedos hacia ti lo bajan y la barra se vacía hacia 0%. El % se lee en esa barra. Clic o doble clic: silencio / reactivar. A 0% o en silencio el altavoz del ala y el de la barra salen tachados.
 
 Pasar el puntero por el ala izquierda o la derecha NO abre la Touch Bar y cancela una expansión que estuviera esperando.
 
@@ -48,7 +48,7 @@ Volumen
 
 Brillo (tira abierta)
 ---------------------
-Con la Touch Bar abierta, si el puntero está sobre el botón de brillo de la Control Strip (el sol, junto al altavoz de esa tira), la rueda del trackpad sube o baja el brillo de la pantalla integrada. El sentido es el del volumen: con desplazamiento natural, dos dedos hacia la tapa suben el brillo y hacia ti lo bajan. El clic en ese botón sigue abriendo el control del sistema. La rueda no actúa sobre el botón de volumen de la tira (el volumen sigue en el ala). El hueco se recuerda mientras la tira sigue abierta y esa zona sigue iluminada, así que un resalte al pasar el puntero no anula la rueda. Si el sol no se reconoció junto al altavoz, o esa zona se queda a oscuras, la rueda no cambia el brillo. La rueda sobre el altavoz de la Control Strip (junto al sol) cambia el volumen del sistema, con el mismo sentido que el ala y en cualquier eje: hacia la tapa sube, hacia ti baja. El clic en ese altavoz sigue abriendo el control del sistema. El ala de volumen no cambia.
+Con la Touch Bar abierta, si el puntero está sobre el botón de brillo de la Control Strip (el sol, junto al altavoz de esa tira), la rueda del trackpad sube o baja el brillo de la pantalla integrada. El sentido es el del volumen: arriba y a la derecha suben, abajo y a la izquierda bajan. El clic en ese botón sigue abriendo el control del sistema. La rueda no actúa sobre el botón de volumen de la tira (el volumen sigue en el ala). El hueco se recuerda mientras la tira sigue abierta y esa zona sigue iluminada, así que un resalte al pasar el puntero no anula la rueda. Si el sol no se reconoció junto al altavoz, o esa zona se queda a oscuras, la rueda no cambia el brillo. La rueda sobre el altavoz de la Control Strip (junto al sol) cambia el volumen del sistema, con el mismo sentido que el ala: arriba y a la derecha suben, abajo y a la izquierda bajan. El clic en ese altavoz sigue abriendo el control del sistema. El ala de volumen no cambia.
 
 Medio izquierda y medio derecha
 -------------------------------
