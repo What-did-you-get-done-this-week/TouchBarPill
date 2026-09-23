@@ -2,6 +2,10 @@
 # Ad-hoc Release build without Xcode.app (Command Line Tools).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+if [[ "${1:-}" == "test" ]]; then
+	swift test --package-path "$ROOT"
+	exit 0
+fi
 SDK="$(xcrun --show-sdk-path)"
 SRC="$ROOT/TouchBarPill"
 APP="$ROOT/build/TouchBarPill.app"
@@ -35,9 +39,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.4.8</string>
+	<string>0.4.9</string>
 	<key>CFBundleVersion</key>
-	<string>15</string>
+	<string>16</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>12.0</string>
 	<key>LSMultipleInstancesProhibited</key>
@@ -53,6 +57,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+swift test --package-path "$ROOT"
+
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 cp "$SRC/en.lproj/Localizable.strings" "$RES/en.lproj/"
 cp "$SRC/es.lproj/Localizable.strings" "$RES/es.lproj/"

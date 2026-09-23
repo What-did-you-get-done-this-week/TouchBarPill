@@ -7,4 +7,5 @@ xcuserdata/
 *.hmap
 *.dSYM
 .swiftpm/
+.build/
 releases/*.app/

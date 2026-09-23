@@ -58,18 +58,13 @@ enum ZonePolicy {
 
     /// Volume-wing scroll steps. Positive raises output toward 100%.
     ///
-    /// Physical contract, MacBook trackpad:
-    /// - Fingers toward the top of the trackpad, away from the user and toward
-    ///   the lid, raise system volume. The bar fills upward toward 100%.
-    /// - Fingers toward the bottom of the trackpad, toward the user, lower
-    ///   volume. The bar empties toward 0%.
+    /// With natural scrolling on, fingers toward the top of the trackpad (away
+    /// from the user, toward the lid) produce a negative `scrollingDeltaY` and
+    /// raise volume. Fingers toward the user produce a positive delta and lower
+    /// it. The bar fills upward toward 100% and empties toward 0%.
     ///
-    /// 0.4.7 kept the natural-scrolling sign (positive `scrollingDeltaY` raised
-    /// volume) and negated only when natural scrolling was off. Arturo-validated:
-    /// after 0.4.7 user reported inverted; 0.4.8 flips once.
-    ///
-    /// The legacy-device undo for natural scrolling off stays. The single extra
-    /// negation is the final step, so it is not applied twice. Momentum events
+    /// Natural scrolling off undoes the device inversion first. One extra
+    /// negation is the last step, so it is not applied twice. Momentum events
     /// keep the gesture's sign (`momentumPhase` is not flipped).
     static func volumeScrollSteps(
         deltaX: CGFloat,
@@ -92,10 +87,43 @@ enum ZonePolicy {
         } else {
             raw = dominant > 0 ? 2 : -2
         }
-        // Arturo-validated: after 0.4.7 user reported inverted; 0.4.8 flips once.
         let steps = -raw
         guard abs(steps) > 0.04 else { return nil }
         return steps
+    }
+
+    /// What the expanded strip should do with a pending leave-collapse.
+    enum CollapseIntent: Equatable {
+        /// Arm the leave-collapse delay.
+        case schedule
+        /// Drop a pending collapse and keep the strip open.
+        case cancel
+        /// Leave the pending collapse alone.
+        case none
+    }
+
+    /// Leave-collapse can be armed only while the strip is open, unpinned, and not being dragged.
+    static func mayArmCollapse(expanded: Bool, pinned: Bool, dragging: Bool) -> Bool {
+        expanded && !pinned && !dragging
+    }
+
+    /// Expanded, unpinned, pointer outside the live chrome: schedule collapse.
+    /// Pin cancels a pending collapse. A pointer that comes back inside cancels it.
+    /// Dragging, or a collapsed strip, does not schedule one.
+    static func collapseIntent(
+        expanded: Bool,
+        pinned: Bool,
+        dragging: Bool,
+        pointerOutside: Bool,
+        collapsePending: Bool
+    ) -> CollapseIntent {
+        guard mayArmCollapse(expanded: expanded, pinned: pinned, dragging: dragging) else {
+            if expanded && pinned && !dragging { return .cancel }
+            return .none
+        }
+        if pointerOutside { return .schedule }
+        if collapsePending { return .cancel }
+        return .none
     }
 
     /// True when `mouse` misses every live chrome rect, even after `slack` points.

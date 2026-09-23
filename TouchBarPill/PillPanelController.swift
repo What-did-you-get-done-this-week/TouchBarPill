@@ -527,8 +527,6 @@ final class PillPanelController: NSObject {
         guard root.pointerOverVolume(slop: 6) else { return }
         if event.timestamp == lastScrollStamp { return }
         lastScrollStamp = event.timestamp
-        // Arturo-validated: after 0.4.7 user reported inverted; 0.4.8 flips once.
-        // The wing applies that step with no second negation.
         guard let steps = ZonePolicy.volumeScrollSteps(
             deltaX: event.scrollingDeltaX,
             deltaY: event.scrollingDeltaY,
@@ -569,14 +567,22 @@ final class PillPanelController: NSObject {
     /// Start the leave-collapse delay. Repeating this restarts the delay, so
     /// the pointer watch must call `ensureCollapseScheduled` instead.
     private func scheduleCollapse() {
-        guard expanded, !PillPlacement.pinExpanded, !dragging else { return }
+        guard ZonePolicy.mayArmCollapse(
+            expanded: expanded,
+            pinned: PillPlacement.pinExpanded,
+            dragging: dragging
+        ) else { return }
         collapseItem?.cancel()
         collapseToken += 1
         let token = collapseToken
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.collapseToken == token else { return }
             self.collapseItem = nil
-            guard self.expanded, !PillPlacement.pinExpanded, !self.dragging else { return }
+            guard ZonePolicy.mayArmCollapse(
+                expanded: self.expanded,
+                pinned: PillPlacement.pinExpanded,
+                dragging: self.dragging
+            ) else { return }
             guard self.panel.isVisible else { return }
             if !self.pointerOutsideLiveChrome() {
                 self.hovering = true
@@ -620,19 +626,28 @@ final class PillPanelController: NSObject {
     /// If the strip is open, unpinned, and the pointer is outside, arm collapse.
     /// Safe to call from a timer, a mouse monitor, or an app switch.
     private func sampleExpandedPointer() {
-        guard panel.isVisible, expanded, !dragging else { return }
-        if PillPlacement.pinExpanded {
-            cancelCollapse()
-            return
-        }
-        if pointerOutsideLiveChrome() {
+        guard panel.isVisible else { return }
+        let pointerOutside = expanded && !dragging && pointerOutsideLiveChrome()
+        switch ZonePolicy.collapseIntent(
+            expanded: expanded,
+            pinned: PillPlacement.pinExpanded,
+            dragging: dragging,
+            pointerOutside: pointerOutside,
+            collapsePending: collapseItem != nil
+        ) {
+        case .schedule:
             hovering = false
             hoverZone = nil
             root.setHotZone(nil)
             ensureCollapseScheduled()
-        } else if collapseItem != nil {
+        case .cancel:
+            let pinned = PillPlacement.pinExpanded
             cancelCollapse()
-            hovering = true
+            if !pinned {
+                hovering = true
+            }
+        case .none:
+            break
         }
     }
 
