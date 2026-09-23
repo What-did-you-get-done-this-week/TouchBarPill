@@ -13,7 +13,7 @@ Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
 2. Abre TouchBarPill.app en el Escritorio (una sola app, versión 0.4.9).
-   Si no se puede sustituir TouchBarPill.app, abre Install-TouchBarPill.command en el Escritorio: cierra TouchBarPill, borra las TouchBarPill*.app viejas, copia la build a TouchBarPill.app y la abre.
+   Si quedan copias TouchBarPill-0.4.x.app, o no se puede sustituir TouchBarPill.app, abre Install-TouchBarPill.command en el Escritorio: cierra TouchBarPill, borra las TouchBarPill*.app viejas, copia la build a TouchBarPill.app y la abre.
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
 
