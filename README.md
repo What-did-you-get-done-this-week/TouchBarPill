@@ -18,7 +18,7 @@ TouchBarPill uses that same class of private API, and changes the window:
 - When the tab is collapsed and idle for about 1.2 seconds, discreet mode (always on) fades it to about 52% opacity. Hover or expand restores full opacity.
 - There is no Dock icon and no Preferences window. A status item has Show/Hide, Display (when more than one screen is attached), Position, Pin Touch bar, Theme (Black, Graphite, Soft accent, and Invisible), Size S/M, Open at Login, Copy Diagnostics, and Quit. Focus is not in that menu. Size S is as tall as the menu bar on the chosen display, so the collapsed notch sits flush with that bar. Size M is the previous small notch. Hovering a theme (including Invisible), a size, a position, or Pin Touch bar previews it on the live notch; the choice is saved only on click. Leaving the item restores the previous look. Position and Pin Touch bar move with the window animation (`NSAnimationContext` and `animator().setFrame`) on hover, on click, and when the pointer leaves. Theme and notch size still change immediately. Hovering Pin shows the strip pinned or unpinned; at Top center, pin on (preview or saved) sits under the menu bar (`visibleFrame.maxY`).
 
-The right wing shows a speaker. Hovering it reveals a volume slider anchored to that wing and does not open the Touch Bar. Scroll on the wing or the slider changes system volume (CoreAudio). With natural scrolling on, two fingers toward the top of the trackpad (away from you) raise volume and the bar fills upward toward 100%; two fingers toward you lower it and the bar empties toward 0%. Click or double-click mutes. At 0% or while muted, the wing and the slider show a crossed-out speaker; otherwise the speaker is the ordinary one and the slider shows the percent. Brightness is not reimplemented. The expanded strip is the adaptive bar itself. If the stream cannot attach, the strip becomes a short message and a Try Again button instead of fake stand-in controls.
+The right wing shows a speaker. Hovering it reveals a volume slider anchored to that wing and does not open the Touch Bar. Scroll on the wing or the slider changes system volume (CoreAudio). With natural scrolling on, two fingers toward the top of the trackpad (away from you) raise volume and the bar fills upward toward 100%; two fingers toward you lower it and the bar empties toward 0%. Click or double-click mutes. At 0% or while muted, the wing and the slider show a crossed-out speaker; otherwise the speaker is the ordinary one and the slider shows the percent. With the strip open, two-finger scroll over the Control Strip brightness button (the sun beside the speaker) changes built-in display brightness. The sign matches the volume wing: natural scrolling on, fingers away from you raise brightness, fingers toward you lower it. The click still opens the system brightness control. Scroll on the mirrored volume button does nothing here; volume stays on the wing. If the sun cannot be found next to that speaker, scroll does not change brightness. The expanded strip is the adaptive bar itself. If the stream cannot attach, the strip becomes a short message and a Try Again button instead of fake stand-in controls.
 
 ## Requirements
 
@@ -209,8 +209,10 @@ TouchBarPill/PillPanelController.swift
 TouchBarPill/Placement.swift    Display, anchor, pin, discreet opacity
 TouchBarPill/TouchBarStreamView.swift
                                 Pointer forwarding into the strip
-TouchBarPill/ZonePolicy.swift       Collapsed zones, volume scroll sign, leave-collapse
-Tests/policy-tests.swift          Volume sign and leave-collapse checks (`./build-cli.sh test`)
+TouchBarPill/ZonePolicy.swift       Collapsed zones, volume and brightness scroll sign, leave-collapse
+TouchBarPill/BrightnessGlyph.swift  Control Strip sun hit region in the mirrored frame
+TouchBarPill/SystemBrightness.swift  Built-in brightness via DisplayServices
+Tests/policy-tests.swift          Volume sign, brightness hit, and leave-collapse checks (`./build-cli.sh test`)
 TouchBarPill/LaunchAtLogin.swift  SMAppService login item
 TouchBarPill/L10n.swift            NSLocalizedString helper
 TouchBarPill/en.lproj/Localizable.strings

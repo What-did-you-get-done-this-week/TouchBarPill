@@ -9,9 +9,11 @@ run_policy_tests() {
 	mkdir -p "$ROOT/build"
 	swiftc -sdk "$sdk" -target arm64-apple-macos12.0 \
 		-framework CoreGraphics -framework Foundation \
-		"$ROOT/TouchBarPill/ZonePolicy.swift" "$ROOT/Tests/policy-tests.swift" \
+		"$ROOT/TouchBarPill/ZonePolicy.swift" \
+		"$ROOT/TouchBarPill/BrightnessGlyph.swift" \
+		"$ROOT/Tests/policy-tests.swift" \
 		-o "$out"
-	"$out"
+	"$out" "$ROOT/Tests/fixtures/brightness-pair.luma"
 }
 if [[ "${1:-}" == "test" ]]; then
 	run_policy_tests
@@ -50,9 +52,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.5.2</string>
+	<string>0.5.3</string>
 	<key>CFBundleVersion</key>
-	<string>19</string>
+	<string>20</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>12.0</string>
 	<key>LSMultipleInstancesProhibited</key>
@@ -85,7 +87,8 @@ swiftc -sdk "$SDK" -target arm64-apple-macos12.0 -O -whole-module-optimization \
   "$SRC/main.swift" "$SRC/AppDelegate.swift" "$SRC/L10n.swift" \
   "$SRC/LaunchAtLogin.swift" "$SRC/Placement.swift" \
   "$SRC/FocusSession.swift" "$SRC/FullscreenWatcher.swift" \
-  "$SRC/SystemVolume.swift" "$SRC/ZonePolicy.swift" \
+  "$SRC/SystemVolume.swift" "$SRC/SystemBrightness.swift" "$SRC/ZonePolicy.swift" \
+  "$SRC/BrightnessGlyph.swift" \
   "$SRC/PillPanelController.swift" \
   "$SRC/TouchBarStreamView.swift" "$OBJ/DFRMirror.o" \
   -o "$MACOS/TouchBarPill"

@@ -169,9 +169,17 @@ final class PillPanelController: NSObject {
         }
         // Events that hit this panel never reach the global monitor.
         // Side tabs are thin; this catches the wheel even when the view misses it.
+        // On the expanded strip, the same monitor scrolls brightness only while
+        // the pointer is on the Control Strip sun. Other buttons, including
+        // volume, keep the event.
         localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
-            guard let self else { return event }
-            guard self.panel.isVisible, !self.expanded, self.scrollHit() else { return event }
+            guard let self, self.panel.isVisible else { return event }
+            if self.expanded {
+                guard self.pointerOverBrightness() else { return event }
+                self.scrollExpandedBrightness(event)
+                return nil
+            }
+            guard self.scrollHit() else { return event }
             self.scrollCollapsed(event)
             return nil
         }
@@ -503,10 +511,14 @@ final class PillPanelController: NSObject {
         updatePanelShadow()
     }
 
-    /// Scroll over the volume wing or its slider. The center and focus wing ignore the wheel.
+    /// Scroll over the volume wing, or over the expanded Control Strip sun.
     private func handleGlobalScroll(_ event: NSEvent) {
         let apply = { [weak self] in
-            guard let self, self.panel.isVisible, !self.expanded else { return }
+            guard let self, self.panel.isVisible else { return }
+            if self.expanded {
+                self.scrollExpandedBrightness(event)
+                return
+            }
             guard self.scrollHit() else { return }
             self.scrollCollapsed(event)
         }
@@ -537,6 +549,52 @@ final class PillPanelController: NSObject {
         guard SystemVolume.adjust(by: steps * SystemVolume.step) != nil else { return }
         revealVolumeSlider()
         root.refreshVolumeChrome()
+    }
+
+    /// Scroll on the mirrored brightness button. Clicks still go to the simulator.
+    /// Fingers away from you raise brightness, same sign as the volume wing.
+    /// A sun that cannot be told apart from the speaker is a no-op.
+    private func scrollExpandedBrightness(_ event: NSEvent) {
+        guard expanded, pointerOverBrightness() else { return }
+        if event.timestamp == lastScrollStamp { return }
+        lastScrollStamp = event.timestamp
+        guard let steps = ZonePolicy.brightnessScrollSteps(
+            deltaX: event.scrollingDeltaX,
+            deltaY: event.scrollingDeltaY,
+            precise: event.hasPreciseScrollingDeltas,
+            invertedFromDevice: event.isDirectionInvertedFromDevice
+        ) else { return }
+        _ = SystemBrightness.adjust(by: steps * SystemBrightness.step)
+    }
+
+    /// Screen rect of the Control Strip brightness slot, or nil.
+    private func brightnessSlotOnScreen() -> NSRect? {
+        guard expanded else { return nil }
+        var width = 0
+        var height = 0
+        guard let data = mirror.copyLumaSamplesReturningWidth(&width, height: &height),
+              width > 0, height > 0 else { return nil }
+        let samples = [UInt8](data)
+        guard samples.count == width * height else { return nil }
+        let buffer = LumaBuffer(width: width, height: height, samples: samples)
+        guard let norm = BrightnessGlyph.brightnessSlot(in: buffer) else { return nil }
+        root.layoutSubtreeIfNeeded()
+        let bounds = root.streamView.bounds
+        guard bounds.width > 1, bounds.height > 1 else { return nil }
+        // Luma row 0 is the top of the picture. AppKit views are y-up.
+        let viewRect = NSRect(
+            x: bounds.minX + norm.minX * bounds.width,
+            y: bounds.minY + (1 - norm.maxY) * bounds.height,
+            width: norm.width * bounds.width,
+            height: norm.height * bounds.height
+        )
+        let inWindow = root.streamView.convert(viewRect, to: nil)
+        return panel.convertToScreen(inWindow)
+    }
+
+    private func pointerOverBrightness() -> Bool {
+        guard let slot = brightnessSlotOnScreen() else { return false }
+        return slot.contains(NSEvent.mouseLocation)
     }
 
     /// Slider visible keeps the notch opaque the same way the old volume readout did.

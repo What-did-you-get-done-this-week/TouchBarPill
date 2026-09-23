@@ -500,6 +500,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSPasteboard.general.setString(Self.diagnosticsText(mirror: mirror), forType: .string)
     }
 
+    private static func brightnessDiagnostic() -> String {
+        if let level = SystemBrightness.brightness() {
+            return String(format: "%.0f%% via DisplayServices on the built-in display", level * 100)
+        }
+        return "unavailable (DisplayServices / built-in display)"
+    }
+
     static func diagnosticsText(mirror: DFRMirror) -> String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
@@ -544,6 +551,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         MenuBarHeight: \(String(format: "%.1f", Double(MenuBarHeight.current))) (S depth matches this band; M depth \(String(format: "%.1f", Double(ZonePolicy.depth * ZonePolicy.legacySmallScale))))
         RevealDelay: \(String(format: "%.2f", PillPlacement.revealDelay)) FullscreenHideDelay: \(String(format: "%.2f", PillPlacement.fullscreenHideDelay))
         Focus: phase \(String(describing: FocusSession.shared.phase)) elapsed \(String(format: "%.0f", FocusSession.shared.displayElapsed))s label \(FocusSession.shared.notchLabel)
+        Brightness: \(Self.brightnessDiagnostic())
         Fullscreen: \(FullscreenWatcher.shared.diagnosticToken)
         Invisible: \(PillPlacement.cinemaMode ? "on" : "off")
         CinemaCoverage: \(String(format: "%.0f%%", Double(FullscreenWatcher.shared.frontCoverage * 100)))

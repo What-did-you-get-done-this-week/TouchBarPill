@@ -1,4 +1,4 @@
-COMO ABRIR — TouchBarPill 0.5.2
+COMO ABRIR — TouchBarPill 0.5.3
 ================================
 
 Qué es
@@ -12,7 +12,7 @@ No hay ventana de Preferencias. Todo está en el menú de la barra de menú.
 Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
-2. Abre TouchBarPill.app en el Escritorio (una sola app, versión 0.5.2).
+2. Abre TouchBarPill.app en el Escritorio (una sola app, versión 0.5.3).
    Si quedan copias TouchBarPill-0.4.x.app, o no se puede sustituir TouchBarPill.app, abre Install-TouchBarPill.command en el Escritorio: cierra TouchBarPill, borra las TouchBarPill*.app viejas, copia la build a TouchBarPill.app y la abre.
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
@@ -45,6 +45,10 @@ Volumen
 - A 0% o en silencio: altavoz tachado en el ala y en la barra. Con volumen y sin silencio: altavoz normal.
 - Clic o doble clic: silencio. Otro clic: vuelve el %.
 - No pide micrófono ni Accesibilidad.
+
+Brillo (tira abierta)
+---------------------
+Con la Touch Bar abierta, si el puntero está sobre el botón de brillo de la Control Strip (el sol, junto al altavoz de esa tira), la rueda del trackpad sube o baja el brillo de la pantalla integrada. El sentido es el del volumen: con desplazamiento natural, dos dedos hacia la tapa suben el brillo y hacia ti lo bajan. El clic en ese botón sigue abriendo el control del sistema. La rueda no actúa sobre el botón de volumen de la tira (el volumen sigue en el ala). Si el sol no se reconoce al lado del altavoz, la rueda no cambia el brillo.
 
 Medio izquierda y medio derecha
 -------------------------------

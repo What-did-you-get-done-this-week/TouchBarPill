@@ -211,6 +211,26 @@ enum ZonePolicy {
         return steps
     }
 
+    /// Control Strip brightness scroll. Positive raises the built-in display.
+    ///
+    /// The sign matches `volumeScrollSteps`. With natural scrolling on, two
+    /// fingers toward the top of the trackpad (away from you, toward the lid)
+    /// are a negative `scrollingDeltaY` and increase brightness. Two fingers
+    /// toward you decrease it. Natural scrolling off undoes that once.
+    static func brightnessScrollSteps(
+        deltaX: CGFloat,
+        deltaY: CGFloat,
+        precise: Bool,
+        invertedFromDevice: Bool
+    ) -> Float? {
+        volumeScrollSteps(
+            deltaX: deltaX,
+            deltaY: deltaY,
+            precise: precise,
+            invertedFromDevice: invertedFromDevice
+        )
+    }
+
     /// What the expanded strip should do with a pending leave-collapse.
     enum CollapseIntent: Equatable {
         /// Arm the leave-collapse delay.

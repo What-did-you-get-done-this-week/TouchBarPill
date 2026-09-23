@@ -40,6 +40,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// Forwards a mouse event in `view` into the simulator's Touch Bar coordinate space.
 - (void)postMouseEvent:(NSEvent *)event inView:(NSView *)view;
 
+/// Grayscale copy of the newest frame, row 0 at the top of the picture on screen.
+/// NULL until a frame has been stored. `outWidth` and `outHeight` may be NULL.
+- (nullable NSData *)copyLumaSamplesReturningWidth:(NSInteger *)outWidth height:(NSInteger *)outHeight;
+
 - (NSString *)diagnosticSummary;
 
 @end

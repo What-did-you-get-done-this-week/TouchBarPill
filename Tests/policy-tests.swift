@@ -286,6 +286,90 @@ enum PolicyTests {
             "leaving theme or size does not animate the frame"
         )
 
+        let awayBright = ZonePolicy.brightnessScrollSteps(deltaX: 0, deltaY: -10, precise: true, invertedFromDevice: true)
+        let towardBright = ZonePolicy.brightnessScrollSteps(deltaX: 0, deltaY: 10, precise: true, invertedFromDevice: true)
+        check((awayBright ?? 0) > 0, "fingers away from you raise brightness")
+        check((towardBright ?? 0) < 0, "fingers toward you lower brightness")
+        check(
+            awayBright == ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: -10, precise: true, invertedFromDevice: true),
+            "brightness scroll uses the volume-wing sign"
+        )
+        check(
+            ZonePolicy.brightnessScrollSteps(deltaX: 0, deltaY: 0.1, precise: true, invertedFromDevice: true) == nil,
+            "tiny brightness scroll is ignored"
+        )
+
+        check(BrightnessGlyph.brightnessSlot(in: LumaBuffer(width: 80, height: 30, samples: [UInt8](repeating: 0, count: 80 * 30))) == nil, "a blank strip does not scroll brightness")
+        var sunOnly = GlyphCanvas.blank(400, 60)
+        GlyphCanvas.sun(&sunOnly, cx: 300, cy: 30, radius: 16)
+        check(BrightnessGlyph.brightnessSlot(in: sunOnly) == nil, "a sun with no speaker is not brightness")
+        var speakerOnly = GlyphCanvas.blank(400, 60)
+        GlyphCanvas.speaker(&speakerOnly, cx: 300, cy: 30, radius: 16)
+        check(BrightnessGlyph.brightnessSlot(in: speakerOnly) == nil, "a speaker alone is not brightness")
+
+        var pair = GlyphCanvas.blank(1004, 60)
+        let sunX = 760
+        let speakerX = 900
+        GlyphCanvas.sun(&pair, cx: sunX, cy: 30, radius: 16)
+        GlyphCanvas.speaker(&pair, cx: speakerX, cy: 30, radius: 16)
+        if let slot = BrightnessGlyph.brightnessSlot(in: pair) {
+            let sunFrac = CGFloat(sunX) / 1004
+            let speakerFrac = CGFloat(speakerX) / 1004
+            check(slot.contains(CGPoint(x: sunFrac, y: 0.5)), "brightness slot covers the sun")
+            check(!slot.contains(CGPoint(x: speakerFrac, y: 0.5)), "brightness slot misses the speaker")
+            check(slot.maxX < speakerFrac, "slot ends before the volume glyph")
+            check(slot.minX > 0.5, "the pair on the right stays on the right")
+        } else {
+            check(false, "sun beside speaker is the brightness slot")
+        }
+
+        var swapped = GlyphCanvas.blank(1004, 60)
+        GlyphCanvas.speaker(&swapped, cx: 700, cy: 30, radius: 16)
+        GlyphCanvas.sun(&swapped, cx: 860, cy: 30, radius: 16)
+        if let slot = BrightnessGlyph.brightnessSlot(in: swapped) {
+            check(slot.contains(CGPoint(x: 860.0 / 1004, y: 0.5)), "a sun to the right of the speaker is still brightness")
+            check(!slot.contains(CGPoint(x: 700.0 / 1004, y: 0.5)), "the speaker on the left is outside the slot")
+        } else {
+            check(false, "swapped Control Strip order still finds the sun")
+        }
+
+        var disk = GlyphCanvas.blank(1004, 60)
+        GlyphCanvas.disk(&disk, cx: 760, cy: 30, radius: 14)
+        GlyphCanvas.speaker(&disk, cx: 900, cy: 30, radius: 16)
+        check(BrightnessGlyph.brightnessSlot(in: disk) == nil, "a solid disk next to the speaker is not the sun")
+
+        var nearer = GlyphCanvas.blank(1004, 60)
+        GlyphCanvas.sun(&nearer, cx: 620, cy: 30, radius: 16)
+        GlyphCanvas.sun(&nearer, cx: 760, cy: 30, radius: 16)
+        GlyphCanvas.speaker(&nearer, cx: 900, cy: 30, radius: 16)
+        if let slot = BrightnessGlyph.brightnessSlot(in: nearer) {
+            check(slot.contains(CGPoint(x: 760.0 / 1004, y: 0.5)), "the sun next to the speaker is brightness")
+            check(!slot.contains(CGPoint(x: 620.0 / 1004, y: 0.5)), "a farther sun is not the brightness slot")
+        } else {
+            check(false, "the sun beside the speaker wins over a farther sun")
+        }
+
+        var ambiguous = GlyphCanvas.blank(1004, 60)
+        GlyphCanvas.sun(&ambiguous, cx: 360, cy: 30, radius: 16)
+        GlyphCanvas.speaker(&ambiguous, cx: 500, cy: 30, radius: 16)
+        GlyphCanvas.sun(&ambiguous, cx: 640, cy: 30, radius: 16)
+        check(BrightnessGlyph.brightnessSlot(in: ambiguous) == nil, "two suns equally close to the speaker do nothing")
+
+        if CommandLine.arguments.count > 1 {
+            let path = CommandLine.arguments[1]
+            if let crop = GlyphCanvas.load(path), let slot = BrightnessGlyph.brightnessSlot(in: crop) {
+                let sunFrac = 80.0 / CGFloat(crop.width)
+                let speakerFrac = 228.0 / CGFloat(crop.width)
+                check(slot.contains(CGPoint(x: sunFrac, y: 0.5)), "crop sun is inside the brightness slot")
+                check(!slot.contains(CGPoint(x: speakerFrac, y: 0.5)), "crop speaker is outside the brightness slot")
+                check(slot.maxX < speakerFrac, "crop slot stops before the volume glyph")
+            } else {
+                check(false, "control-strip crop did not yield a brightness slot (\(path))")
+            }
+        } else {
+            check(false, "brightness crop fixture path missing")
+        }
+
         if failures.isEmpty {
             print("policy-tests ok")
         } else {
@@ -294,5 +378,90 @@ enum PolicyTests {
             }
             exit(1)
         }
+    }
+}
+
+/// Synthetic Control Strip glyphs for the brightness hit test.
+enum GlyphCanvas {
+    static func blank(_ width: Int, _ height: Int) -> LumaBuffer {
+        LumaBuffer(width: width, height: height, samples: [UInt8](repeating: 10, count: width * height))
+    }
+
+    static func load(_ path: String) -> LumaBuffer? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)), data.count > 8 else { return nil }
+        let width = Int(UInt32(data[0]) | (UInt32(data[1]) << 8) | (UInt32(data[2]) << 16) | (UInt32(data[3]) << 24))
+        let height = Int(UInt32(data[4]) | (UInt32(data[5]) << 8) | (UInt32(data[6]) << 16) | (UInt32(data[7]) << 24))
+        guard width > 0, height > 0, data.count == 8 + width * height else { return nil }
+        return LumaBuffer(width: width, height: height, samples: [UInt8](data.dropFirst(8)))
+    }
+
+    static func sun(_ buffer: inout LumaBuffer, cx: Int, cy: Int, radius: Int) {
+        let r = Double(radius)
+        for y in (cy - radius)...(cy + radius) {
+            for x in (cx - radius)...(cx + radius) {
+                let dx = Double(x - cx)
+                let dy = Double(y - cy)
+                let dist = hypot(dx, dy)
+                if dist <= r * 0.34 {
+                    plot(&buffer, x, y)
+                    continue
+                }
+                guard dist >= r * 0.50, dist <= r * 0.96 else { continue }
+                let angle = atan2(dy, dx)
+                let sector = angle / (Double.pi / 4)
+                let frac = abs(sector - sector.rounded())
+                let thickness = frac * (Double.pi / 4) * dist
+                if thickness <= max(1.15, r * 0.11) {
+                    plot(&buffer, x, y)
+                }
+            }
+        }
+    }
+
+    static func disk(_ buffer: inout LumaBuffer, cx: Int, cy: Int, radius: Int) {
+        let r = Double(radius)
+        for y in (cy - radius)...(cy + radius) {
+            for x in (cx - radius)...(cx + radius) where hypot(Double(x - cx), Double(y - cy)) <= r {
+                plot(&buffer, x, y)
+            }
+        }
+    }
+
+    /// Cone on the left, two wave bars on the right.
+    static func speaker(_ buffer: inout LumaBuffer, cx: Int, cy: Int, radius: Int) {
+        let bodyH = max(8, Int(Double(radius) * 0.85))
+        let left = cx - radius
+        let bodyW = max(4, radius / 2)
+        for y in (cy - bodyH)...(cy + bodyH) {
+            for x in left...(left + bodyW) {
+                plot(&buffer, x, y)
+            }
+        }
+        let coneEnd = left + bodyW + max(4, radius / 3)
+        for y in (cy - bodyH)...(cy + bodyH) {
+            let t = Double(abs(y - cy)) / Double(max(bodyH, 1))
+            let reach = Int(Double(coneEnd - (left + bodyW)) * (1 - t))
+            if reach <= 0 { continue }
+            for x in (left + bodyW)..<(left + bodyW + reach) {
+                plot(&buffer, x, y)
+            }
+        }
+        let bar1 = coneEnd + max(3, radius / 5)
+        let bar2 = bar1 + max(4, radius / 3)
+        let tall = max(6, bodyH - 1)
+        let short = max(4, bodyH / 2)
+        for y in (cy - tall)...(cy + tall) {
+            plot(&buffer, bar1, y)
+            plot(&buffer, bar1 + 1, y)
+        }
+        for y in (cy - short)...(cy + short) {
+            plot(&buffer, bar2, y)
+            plot(&buffer, bar2 + 1, y)
+        }
+    }
+
+    private static func plot(_ buffer: inout LumaBuffer, _ x: Int, _ y: Int) {
+        guard x >= 0, y >= 0, x < buffer.width, y < buffer.height else { return }
+        buffer.samples[y * buffer.width + x] = 242
     }
 }

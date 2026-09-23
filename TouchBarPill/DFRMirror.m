@@ -39,6 +39,9 @@ static NSString *DFRFrameworkPath(void) {
 @property (nonatomic, readwrite) CGSize touchBarPointSize;
 @property (nonatomic, readwrite) NSInteger lastSurfaceWidth;
 @property (nonatomic, readwrite) NSInteger lastSurfaceHeight;
+@property (nonatomic, strong, nullable) NSData *lumaSamples;
+@property (nonatomic) NSInteger lumaWidth;
+@property (nonatomic) NSInteger lumaHeight;
 @property (nonatomic, copy, nullable) CGDisplayStreamFrameAvailableHandler frameHandler;
 @property (nonatomic, strong, nullable) id simulator;
 @property (nonatomic, strong, nullable) id touchBar;
@@ -203,6 +206,9 @@ static NSString *DFRFrameworkPath(void) {
     self.simulatorReady = NO;
     self.clicksEnabled = NO;
     self.hasFrame = NO;
+    self.lumaSamples = nil;
+    self.lumaWidth = 0;
+    self.lumaHeight = 0;
 
     NSView *view = self.streamView;
     if (view.layer) {
@@ -235,6 +241,16 @@ static NSString *DFRFrameworkPath(void) {
     x = MIN(MAX(x, 0), size.width);
     y = MIN(MAX(y, 0), size.height);
     _post(self.simulator, event.type, NSMakePoint(x, y));
+}
+
+- (NSData *)copyLumaSamplesReturningWidth:(NSInteger *)outWidth height:(NSInteger *)outHeight {
+    if (outWidth) {
+        *outWidth = self.lumaWidth;
+    }
+    if (outHeight) {
+        *outHeight = self.lumaHeight;
+    }
+    return [self.lumaSamples copy];
 }
 
 - (NSString *)diagnosticSummary {
@@ -400,6 +416,8 @@ static NSString *DFRFrameworkPath(void) {
         return;
     }
 
+    [self storeLumaFromImage:picture];
+
     NSView *view = self.streamView;
     if (view) {
         if (!view.wantsLayer) {
@@ -426,6 +444,39 @@ static NSString *DFRFrameworkPath(void) {
             : NSLocalizedString(@"Mirroring the Touch Bar picture. Clicks are unavailable on this OS build.", @"");
         [self publish];
     }
+}
+
+/// 8-bit luminance, row 0 = top of the picture assigned to the stream layer.
+- (void)storeLumaFromImage:(CGImageRef)image {
+    size_t width = CGImageGetWidth(image);
+    size_t height = CGImageGetHeight(image);
+    if (width < 2 || height < 2 || width > 4096 || height > 512) {
+        self.lumaSamples = nil;
+        self.lumaWidth = 0;
+        self.lumaHeight = 0;
+        return;
+    }
+    NSMutableData *data = [NSMutableData dataWithLength:width * height];
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceGray();
+    CGContextRef context = CGBitmapContextCreate(data.mutableBytes, width, height, 8, width, space, kCGImageAlphaNone);
+    CGColorSpaceRelease(space);
+    if (!context) {
+        self.lumaSamples = nil;
+        self.lumaWidth = 0;
+        self.lumaHeight = 0;
+        return;
+    }
+    CGContextSetGrayFillColor(context, 0, 1);
+    CGContextFillRect(context, CGRectMake(0, 0, (CGFloat)width, (CGFloat)height));
+    // A device-gray bitmap from CGContextDrawImage stores the top of the image
+    // in row 0, which is the same order NSBitmapImageRep uses and the order
+    // the strip shows. Do not flip the CTM; that puts the bottom in row 0.
+    CGContextSetInterpolationQuality(context, kCGInterpolationNone);
+    CGContextDrawImage(context, CGRectMake(0, 0, (CGFloat)width, (CGFloat)height), image);
+    CGContextRelease(context);
+    self.lumaSamples = data;
+    self.lumaWidth = (NSInteger)width;
+    self.lumaHeight = (NSInteger)height;
 }
 
 - (void)noteBlitFailure:(NSString *)message {
