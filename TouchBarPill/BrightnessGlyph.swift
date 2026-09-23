@@ -127,6 +127,42 @@ enum BrightnessGlyph {
         return clamped
     }
 
+    /// Slot to hit-test while the strip is open.
+    ///
+    /// Hovering the brightness button (and the system control that replaces it)
+    /// wipes the sun and speaker out of the frame, so a fresh scan returns nil
+    /// exactly when the pointer is on that button. Keep the last slot when the
+    /// same patch of the picture is still lit. A dark patch means the strip
+    /// moved on; drop it instead of scrolling whatever landed there.
+    static func latchedSlot(detected: CGRect?, previous: CGRect?, buffer: LumaBuffer) -> CGRect? {
+        if let detected { return detected }
+        guard let previous, slotStillMarked(previous, in: buffer) else { return nil }
+        return previous
+    }
+
+    /// Icon or highlight ink still occupies the latched button.
+    static func slotStillMarked(_ slot: CGRect, in buffer: LumaBuffer) -> Bool {
+        let width = buffer.width
+        let height = buffer.height
+        guard width > 1, height > 1, buffer.samples.count == width * height else { return false }
+        let clamped = slot.intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+        guard !clamped.isNull, clamped.width > 0, clamped.height > 0 else { return false }
+        let x0 = max(0, min(width - 1, Int((clamped.minX * CGFloat(width)).rounded(.down))))
+        let x1 = max(x0, min(width - 1, Int((clamped.maxX * CGFloat(width)).rounded(.up)) - 1))
+        let y0 = max(0, min(height - 1, Int((clamped.minY * CGFloat(height)).rounded(.down))))
+        let y1 = max(y0, min(height - 1, Int((clamped.maxY * CGFloat(height)).rounded(.up)) - 1))
+        var bright = 0
+        var count = 0
+        for y in y0...y1 {
+            let row = y * width
+            for x in x0...x1 {
+                count += 1
+                if buffer.samples[row + x] >= 140 { bright += 1 }
+            }
+        }
+        return bright >= 24 && bright * 50 >= count
+    }
+
     private struct Icon {
         var minX: Int
         var maxX: Int

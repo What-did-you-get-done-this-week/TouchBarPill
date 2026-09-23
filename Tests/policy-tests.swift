@@ -355,6 +355,34 @@ enum PolicyTests {
         GlyphCanvas.sun(&ambiguous, cx: 640, cy: 30, radius: 16)
         check(BrightnessGlyph.brightnessSlot(in: ambiguous) == nil, "two suns equally close to the speaker do nothing")
 
+        if let slot = BrightnessGlyph.brightnessSlot(in: pair) {
+            var highlighted = pair
+            let x0 = max(0, Int(slot.minX * CGFloat(highlighted.width)))
+            let x1 = min(highlighted.width, Int(slot.maxX * CGFloat(highlighted.width)))
+            for y in 0..<highlighted.height {
+                for x in x0..<x1 {
+                    highlighted.samples[y * highlighted.width + x] = 210
+                }
+            }
+            check(BrightnessGlyph.brightnessSlot(in: highlighted) == nil, "a lit brightness button hides the sun")
+            let kept = BrightnessGlyph.latchedSlot(detected: nil, previous: slot, buffer: highlighted)
+            check(kept == slot, "hover keeps the brightness slot")
+            let speakerFrac = CGFloat(speakerX) / 1004
+            check(!(kept?.contains(CGPoint(x: speakerFrac, y: 0.5)) ?? true), "the remembered slot still misses the speaker")
+            var dark = highlighted
+            for index in dark.samples.indices { dark.samples[index] = 12 }
+            check(
+                BrightnessGlyph.latchedSlot(detected: nil, previous: slot, buffer: dark) == nil,
+                "a dark strip drops the remembered slot"
+            )
+            check(
+                BrightnessGlyph.latchedSlot(detected: slot, previous: nil, buffer: pair) == slot,
+                "a fresh sun replaces an empty latch"
+            )
+        } else {
+            check(false, "latch test needs a detected sun")
+        }
+
         if CommandLine.arguments.count > 1 {
             let path = CommandLine.arguments[1]
             if let crop = GlyphCanvas.load(path), let slot = BrightnessGlyph.brightnessSlot(in: crop) {

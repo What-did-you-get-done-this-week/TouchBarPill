@@ -76,7 +76,15 @@ final class PillPanelController: NSObject {
 
     private let panel: PillPanel
     private let root: PillRootView
-    private var expanded = false
+    private var expanded = false {
+        didSet {
+            if !expanded { latchedBrightnessNorm = nil }
+        }
+    }
+    /// Last Control Strip brightness slot (normalized, top-left, y down).
+    /// Kept while a hover highlight hides the sun. Cleared when the strip closes.
+    private var latchedBrightnessNorm: CGRect?
+    private var brightnessLatchTick: TimeInterval = 0
     private var animating = false
     private var hovering = false
     private var dragging = false
@@ -556,28 +564,53 @@ final class PillPanelController: NSObject {
     /// A sun that cannot be told apart from the speaker is a no-op.
     private func scrollExpandedBrightness(_ event: NSEvent) {
         guard expanded, pointerOverBrightness() else { return }
-        if event.timestamp == lastScrollStamp { return }
-        lastScrollStamp = event.timestamp
         guard let steps = ZonePolicy.brightnessScrollSteps(
             deltaX: event.scrollingDeltaX,
             deltaY: event.scrollingDeltaY,
             precise: event.hasPreciseScrollingDeltas,
             invertedFromDevice: event.isDirectionInvertedFromDevice
         ) else { return }
+        if event.timestamp == lastScrollStamp { return }
+        lastScrollStamp = event.timestamp
         _ = SystemBrightness.adjust(by: steps * SystemBrightness.step)
     }
 
-    /// Screen rect of the Control Strip brightness slot, or nil.
-    private func brightnessSlotOnScreen() -> NSRect? {
+    /// Normalized brightness slot, remembering the last one while the glyph is hidden.
+    private func currentBrightnessNorm() -> CGRect? {
         guard expanded else { return nil }
+        guard let buffer = copyLumaBuffer() else { return latchedBrightnessNorm }
+        let detected = BrightnessGlyph.brightnessSlot(in: buffer)
+        let resolved = BrightnessGlyph.latchedSlot(
+            detected: detected,
+            previous: latchedBrightnessNorm,
+            buffer: buffer
+        )
+        latchedBrightnessNorm = resolved
+        return resolved
+    }
+
+    private func copyLumaBuffer() -> LumaBuffer? {
         var width = 0
         var height = 0
         guard let data = mirror.copyLumaSamplesReturningWidth(&width, height: &height),
               width > 0, height > 0 else { return nil }
         let samples = [UInt8](data)
         guard samples.count == width * height else { return nil }
-        let buffer = LumaBuffer(width: width, height: height, samples: samples)
-        guard let norm = BrightnessGlyph.brightnessSlot(in: buffer) else { return nil }
+        return LumaBuffer(width: width, height: height, samples: samples)
+    }
+
+    /// Arm the latch from frames that still show the sun, before a hover hides it.
+    private func refreshBrightnessLatch() {
+        guard expanded else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - brightnessLatchTick < 0.05 { return }
+        brightnessLatchTick = now
+        _ = currentBrightnessNorm()
+    }
+
+    /// Screen rect of the Control Strip brightness slot, or nil.
+    private func brightnessSlotOnScreen() -> NSRect? {
+        guard let norm = currentBrightnessNorm() else { return nil }
         root.layoutSubtreeIfNeeded()
         let bounds = root.streamView.bounds
         guard bounds.width > 1, bounds.height > 1 else { return nil }
@@ -685,6 +718,7 @@ final class PillPanelController: NSObject {
     /// Safe to call from a timer, a mouse monitor, or an app switch.
     private func sampleExpandedPointer() {
         guard panel.isVisible else { return }
+        refreshBrightnessLatch()
         let pointerOutside = expanded && !dragging && pointerOutsideLiveChrome()
         switch ZonePolicy.collapseIntent(
             expanded: expanded,
