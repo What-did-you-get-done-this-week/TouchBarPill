@@ -53,7 +53,7 @@ TARGET="${DESKTOP}/TouchBarPill.app"
 if ! ditto "${BUILD}" "${TARGET}"; then
 	echo "No pude sustituir ${TARGET}." >&2
 	if [[ ! -d "${TARGET}" ]]; then
-		FALLBACK="${DESKTOP}/TouchBarPill-0.4.9.app"
+		FALLBACK="${DESKTOP}/TouchBarPill-0.5.0.app"
 		ditto "${BUILD}" "${FALLBACK}"
 		xattr -dr com.apple.quarantine "${FALLBACK}" >/dev/null 2>&1 || true
 		open "${FALLBACK}"

@@ -47,7 +47,9 @@ enum NotchTheme: String, CaseIterable {
     }
 }
 
-/// Collapsed notch size. M matches 0.4.0 (132×32). S scales ~85%.
+/// Collapsed notch size.
+/// S hangs exactly as far as the menu bar on the chosen display.
+/// M is the pre-0.5.0 small notch (base depth × 0.85), width and height together.
 enum NotchSize: String, CaseIterable {
     case small
     case medium
@@ -59,11 +61,95 @@ enum NotchSize: String, CaseIterable {
         }
     }
 
-    /// Uniform scale vs the medium (current) notch.
-    var scale: CGFloat {
+    var tier: ZonePolicy.NotchScaleTier {
         switch self {
-        case .small: return 0.85
-        case .medium: return 1.0
+        case .small: return .menuBar
+        case .medium: return .legacySmall
+        }
+    }
+
+    /// Uniform scale of the base notch. Fonts, ears, span, and depth follow it,
+    /// so S stays proportional while its height matches the menu bar.
+    var scale: CGFloat {
+        ZonePolicy.scale(for: tier, menuBarHeight: MenuBarHeight.current)
+    }
+}
+
+/// Menu-bar thickness on a display, in points.
+///
+/// Size S uses this so the collapsed top notch ends on the menu-bar line
+/// instead of sticking out into the desktop. The band that actually reserves
+/// that space is `frame.maxY - visibleFrame.maxY` on the chosen screen.
+/// When that display is not reserving a bar (another screen owns it, or the
+/// bar is hidden), fall back to `NSApp.mainMenu?.menuBarHeight`, then
+/// `NSStatusBar.system.thickness`.
+enum MenuBarHeight {
+    static func on(_ screen: NSScreen?) -> CGFloat {
+        if let screen {
+            let reserved = screen.frame.maxY - screen.visibleFrame.maxY
+            if reserved >= 12 && reserved <= 64 {
+                return reserved
+            }
+        }
+        if let main = NSApp.mainMenu {
+            let bar = main.menuBarHeight
+            if bar >= 12 && bar <= 64 { return bar }
+        }
+        let thickness = NSStatusBar.system.thickness
+        if thickness >= 12 && thickness <= 64 { return thickness }
+        return 24
+    }
+
+    /// Menu bar on the display the notch is attached to.
+    static var current: CGFloat { on(DisplayList.resolved()) }
+}
+
+/// Hover preview for the status menu. Never written to UserDefaults.
+/// A click commits; leaving the item clears this and the live notch returns
+/// to the saved theme, size, position, and Invisible flag.
+/// Pin is not previewed.
+enum ChromePreview {
+    static var theme: NotchTheme?
+    static var invisible: Bool?
+    static var size: NotchSize?
+    static var edge: PillEdge?
+    /// Position presets preview with no drag offset.
+    static var forcePresetOffset = false
+    /// Menu scrubbing should jump, not animate, so leave-restore is immediate.
+    static var prefersInstantFrame = false
+
+    static var isActive: Bool {
+        theme != nil || invisible != nil || size != nil || edge != nil || forcePresetOffset
+    }
+
+    /// Saved cinema flag, ignoring the overlay.
+    static var committedInvisible: Bool {
+        UserDefaults.standard.bool(forKey: PillPlacement.cinemaModeKey)
+    }
+
+    /// True when the overlay would show or hide the notch differently than the saved flag.
+    static var invisibleAffectsConcealment: Bool {
+        guard let invisible else { return false }
+        return invisible != committedInvisible
+    }
+
+    static func clear() {
+        theme = nil
+        invisible = nil
+        size = nil
+        edge = nil
+        forcePresetOffset = false
+    }
+
+    /// Relayout after the overlay is gone. `concealChanged` is captured by the
+    /// caller before `clear()` because the overlay is already gone here.
+    /// Size and position hovers pass false so they do not scan windows.
+    static func publishCleared(concealChanged: Bool) {
+        prefersInstantFrame = true
+        PillPlacement.postChange()
+        prefersInstantFrame = false
+        if concealChanged {
+            FullscreenWatcher.shared.refresh()
         }
     }
 }
@@ -130,6 +216,7 @@ enum PillPlacement {
 
     static var edge: PillEdge {
         get {
+            if let preview = ChromePreview.edge { return preview }
             if let raw = UserDefaults.standard.string(forKey: edgeKey),
                let edge = PillEdge(rawValue: raw) {
                 return edge
@@ -148,6 +235,7 @@ enum PillPlacement {
     /// On top/bottom edges this is horizontal. On left/right it is vertical.
     static var offset: CGFloat {
         get {
+            if ChromePreview.forcePresetOffset { return 0 }
             guard UserDefaults.standard.object(forKey: offsetKey) != nil else { return 0 }
             return CGFloat(UserDefaults.standard.double(forKey: offsetKey))
         }
@@ -209,8 +297,10 @@ enum PillPlacement {
     }
 
     /// Collapsed chrome theme. Soft accent when the key is missing.
+    /// A menu hover may overlay this until the pointer leaves or a click commits.
     static var theme: NotchTheme {
         get {
+            if let preview = ChromePreview.theme { return preview }
             if let raw = UserDefaults.standard.string(forKey: themeKey),
                let theme = NotchTheme(rawValue: raw) {
                 return theme
@@ -221,8 +311,10 @@ enum PillPlacement {
     }
 
     /// Collapsed notch size. Small when the key is missing.
+    /// A menu hover may overlay this until the pointer leaves or a click commits.
     static var size: NotchSize {
         get {
+            if let preview = ChromePreview.size { return preview }
             if let raw = UserDefaults.standard.string(forKey: sizeKey),
                let size = NotchSize(rawValue: raw) {
                 return size
@@ -254,7 +346,10 @@ enum PillPlacement {
     /// Manual override when window-frame detection cannot see a player.
     /// Off by default. The status menu toggles it. Does not grant any permission.
     static var cinemaMode: Bool {
-        get { UserDefaults.standard.bool(forKey: cinemaModeKey) }
+        get {
+            if let preview = ChromePreview.invisible { return preview }
+            return UserDefaults.standard.bool(forKey: cinemaModeKey)
+        }
         set { UserDefaults.standard.set(newValue, forKey: cinemaModeKey) }
     }
 

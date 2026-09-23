@@ -1,4 +1,4 @@
-COMO ABRIR — TouchBarPill 0.4.9
+COMO ABRIR — TouchBarPill 0.5.0
 ================================
 
 Qué es
@@ -12,7 +12,7 @@ No hay ventana de Preferencias. Todo está en el menú de la barra de menú.
 Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
-2. Abre TouchBarPill.app en el Escritorio (una sola app, versión 0.4.9).
+2. Abre TouchBarPill.app en el Escritorio (una sola app, versión 0.5.0).
    Si quedan copias TouchBarPill-0.4.x.app, o no se puede sustituir TouchBarPill.app, abre Install-TouchBarPill.command en el Escritorio: cierra TouchBarPill, borra las TouchBarPill*.app viejas, copia la build a TouchBarPill.app y la abre.
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
@@ -27,7 +27,7 @@ De izquierda a derecha:
 
 Pasar el puntero por el ala izquierda o la derecha NO abre la Touch Bar y cancela una expansión que estuviera esperando.
 
-Si la tira está abierta y el puntero sale —a la barra de menú, a otra app, o simplemente fuera de la muesca y de la tira— se pliega a los 0,4 s. No se queda abierta. Fijar expandida sigue impidiendo ese pliegue.
+Si la tira está abierta y el puntero sale —a la barra de menú, a otra app, o simplemente fuera de la muesca y de la tira— se pliega a los 0,4 s. No se queda abierta. Fijar Touch Bar sigue impidiendo ese pliegue.
 
 Foco
 ----
@@ -64,18 +64,18 @@ Detección de la ventana: solo el marco en pantalla (CGWindowList, bounds). No l
 Aspecto
 -------
 - Tema, en el menú de estado → Tema: Negro, Grafito, Acento suave. Debajo, Invisible.
-- Tamaño: S / M. S es el valor de una instalación nueva.
+- Tamaño: S / M. S mide lo mismo que la barra de menú de esa pantalla y no asoma por debajo. M es el tamaño pequeño anterior. Pasar el puntero por un tema, un tamaño o una posición lo previsualiza; el clic lo guarda. Al salir sin clic vuelve el aspecto guardado. Fijar Touch Bar no se previsualiza.
 - La muesca en reposo siempre se atenúa (modo discreto fijo).
 
 Posición y fijar
 ----------------
 - Centro superior / inferior / medio izquierda / derecha, y arrastre.
-- Fijar expandida: menú de estado, o clic derecho → Desfijar en la tira expandida.
+- Fijar Touch Bar: menú de estado, o clic derecho → Desfijar en la tira expandida. Con centro superior, la tira fijada queda justo debajo de la barra de menú (los menús siguen clicables).
 - Pantalla: el menú solo muestra Pantalla si hay más de un monitor.
 
 Menú
 ----
-Icono de la barra de menú: Mostrar/Ocultar, Posición, Fijar expandida, Tema (con Invisible), Tamaño, Abrir al iniciar sesión (desactivado hasta que lo actives), Copiar diagnósticos, Salir. No hay entradas de foco.
+Icono de la barra de menú: Mostrar/Ocultar, Posición, Fijar Touch Bar, Tema (con Invisible), Tamaño, Abrir al iniciar sesión (desactivado hasta que lo actives), Copiar diagnósticos, Salir. No hay entradas de foco.
 
 No hay Preferencias.
 

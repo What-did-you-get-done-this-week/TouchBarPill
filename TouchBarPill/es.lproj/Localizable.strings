@@ -66,7 +66,7 @@
 "Center" = "Centro";
 "Right" = "Derecha";
 "Custom" = "Personalizada";
-"Pin expanded" = "Fijar expandida";
+"Pin Touch bar" = "Fijar Touch Bar";
 "Unpin" = "Desfijar";
 "Discreet mode" = "Modo discreto";
 "Idle opacity" = "Opacidad en reposo";
@@ -92,7 +92,7 @@
 "Normal" = "Normal";
 "Wide" = "Ancha";
 "Collapsed notch chrome only. Black, Graphite, or Soft accent (deep blue). The Touch Bar stream is unchanged." = "Solo el cromado de la muesca plegada. Negro, Grafito o Acento suave (azul profundo). La señal de la Touch Bar no cambia.";
-"S is smaller; M matches the previous size. Label and silhouette scale together." = "S es más pequeña; M coincide con el tamaño anterior. Etiqueta y silueta escalan juntas.";
+"S matches the menu bar height on this display. M is the previous small size." = "S coincide con la altura de la barra de menú en esta pantalla. M es el tamaño pequeño anterior.";
 "Fullscreen edge target width. Narrow / Normal / Wide. Normal is a bit wider than the visual tab so the near-invisible hit area is easier to find." = "Anchura del borde en pantalla completa. Estrecha / Normal / Ancha. Normal es un poco más ancha que la pestaña visible para que el área casi invisible sea más fácil de encontrar.";
 "A black notch attaches to the edge you choose — top center by default, or bottom, left mid, or right mid. Drag it along that edge. Hover to open the Touch Bar. Click the collapsed notch to start or pause Focus. Scroll to change volume; double-click to mute. The expanded strip follows the same edge. Move away and it folds back, unless it is pinned." = "Una muesca negra se pega al borde que elijas — centro superior por omisión, o inferior, medio izquierda o medio derecha. Arrástrala por ese borde. Pasa el puntero para abrir la Touch Bar. Clic en la muesca plegada para iniciar o pausar Foco. Desplaza para el volumen; doble clic para silenciar. La tira expandida sigue el mismo borde. Al salir se pliega, salvo que esté fijada.";
 

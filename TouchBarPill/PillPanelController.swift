@@ -848,12 +848,21 @@ final class PillPanelController: NSObject {
         }
 
         let target = expanded ? expandedFrame(on: screen) : collapsedFrame(on: screen)
+        let instant = ChromePreview.prefersInstantFrame
         if panel.frame != target {
-            animate(to: target, expanding: expanded)
+            if instant {
+                animating = false
+                panel.setFrame(target, display: true)
+            } else {
+                animate(to: target, expanding: expanded)
+            }
         }
 
         root.apply(mirror: mirror, expanded: expanded)
-        refreshChromeOpacity(animated: true)
+        refreshChromeOpacity(animated: !instant)
+        if instant {
+            panel.displayIfNeeded()
+        }
         if !PillPlacement.pinExpanded && expanded && pointerOutsideLiveChrome() {
             hovering = false
             hoverZone = nil
@@ -991,9 +1000,14 @@ final class PillPanelController: NSObject {
 
         switch PillPlacement.edge {
         case .topCenter:
+            // Pinned stays open, so it must sit under the menu bar. A hover
+            // expand is brief and keeps the previous top placement.
+            let drop = PillPlacement.pinExpanded
+                ? ZonePolicy.pinnedTopDrop(menuBarReserved: frame.maxY - visible.maxY)
+                : gap
             return NSRect(
                 x: frame.midX - size.width / 2,
-                y: frame.maxY - size.height - gap,
+                y: frame.maxY - size.height - drop,
                 width: size.width,
                 height: size.height
             )

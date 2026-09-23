@@ -12,6 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let positionMenu = NSMenu()
     private let themeMenu = NSMenu()
     private let sizeMenu = NSMenu()
+    private var previewRestore: DispatchWorkItem?
+    /// Click action is in flight. A trailing highlight-clear must not restore over the commit.
+    private var committingMenuChoice = false
     private var didTeardown = false
     private var mirror: DFRMirror!
     private var pill: PillPanelController!
@@ -46,6 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        // Submenus share this delegate for hover preview. Rebuilding them
+        // while they open would wipe the item under the pointer.
+        guard menu === statusMenu else { return }
         showItem.title = pill.isVisible ? L("Hide Touch Bar") : L("Show Touch Bar")
         loginItem.title = LaunchAtLogin.menuTitle()
         loginItem.state = LaunchAtLogin.isOn ? .on : .off
@@ -55,6 +61,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         rebuildPositionMenu()
         rebuildThemeMenu()
         rebuildSizeMenu()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === themeMenu || menu === sizeMenu || menu === positionMenu else { return }
+        // The click action runs in this same turn. Restore on the next turn
+        // so a commit is already written and this becomes a no-op.
+        schedulePreviewRestore()
+    }
+
+    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+        guard menu === themeMenu || menu === sizeMenu || menu === positionMenu else { return }
+        guard let item, item.isEnabled, item.action != nil else {
+            schedulePreviewRestore()
+            return
+        }
+        cancelPreviewRestore()
+        if menu === themeMenu {
+            previewThemeItem(item)
+        } else if menu === sizeMenu {
+            previewSizeItem(item)
+        } else {
+            previewPositionItem(item)
+        }
     }
 
     private func buildStatusItem() {
@@ -80,18 +109,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         positionItem = NSMenuItem(title: L("Position"), action: nil, keyEquivalent: "")
         positionItem.submenu = positionMenu
+        positionMenu.delegate = self
         menu.addItem(positionItem)
 
-        pinItem = NSMenuItem(title: L("Pin expanded"), action: #selector(togglePin), keyEquivalent: "")
+        // Pin commits on click only. It does not preview on hover.
+        pinItem = NSMenuItem(title: L("Pin Touch bar"), action: #selector(togglePin), keyEquivalent: "")
         pinItem.target = self
         menu.addItem(pinItem)
 
         let themeItem = NSMenuItem(title: L("Notch theme"), action: nil, keyEquivalent: "")
         themeItem.submenu = themeMenu
+        themeMenu.delegate = self
         menu.addItem(themeItem)
 
         let sizeItem = NSMenuItem(title: L("Notch size"), action: nil, keyEquivalent: "")
         sizeItem.submenu = sizeMenu
+        sizeMenu.delegate = self
         menu.addItem(sizeItem)
 
         menu.addItem(.separator())
@@ -154,20 +187,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleCinema() {
-        PillPlacement.cinemaMode.toggle()
-        FullscreenWatcher.shared.refresh()
+        commitMenuChoice {
+            let committed = ChromePreview.committedInvisible
+            PillPlacement.cinemaMode = !committed
+        }
     }
 
     @objc private func chooseTheme(_ sender: NSMenuItem) {
         guard NotchTheme.allCases.indices.contains(sender.tag) else { return }
-        PillPlacement.theme = NotchTheme.allCases[sender.tag]
-        PillPlacement.postChange()
+        let theme = NotchTheme.allCases[sender.tag]
+        commitMenuChoice {
+            PillPlacement.theme = theme
+            // The hover showed that color, so the commit is visible too.
+            PillPlacement.cinemaMode = false
+        }
     }
 
     @objc private func chooseSize(_ sender: NSMenuItem) {
         guard NotchSize.allCases.indices.contains(sender.tag) else { return }
-        PillPlacement.size = NotchSize.allCases[sender.tag]
-        PillPlacement.postChange()
+        let size = NotchSize.allCases[sender.tag]
+        commitMenuChoice {
+            PillPlacement.size = size
+        }
     }
 
     @objc private func chooseDisplay(_ sender: NSMenuItem) {
@@ -178,15 +219,117 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func chooseEdge(_ sender: NSMenuItem) {
-        let edge: PillEdge
-        switch sender.tag {
-        case 1: edge = .bottomCenter
-        case 2: edge = .leftMid
-        case 3: edge = .rightMid
-        default: edge = .topCenter
+        let edge = edgeForTag(sender.tag)
+        commitMenuChoice {
+            PillPlacement.storeEdge(edge)
         }
-        PillPlacement.storeEdge(edge)
+    }
+
+    /// Hover previews the color and turns Invisible off so the fill is visible.
+    /// Leaving without a click restores both. Pin is not on this menu.
+    private func previewThemeItem(_ item: NSMenuItem) {
+        let leavingConceal = ChromePreview.invisibleAffectsConcealment
+        if item.action == #selector(toggleCinema) {
+            ChromePreview.theme = nil
+            ChromePreview.invisible = true
+        } else if NotchTheme.allCases.indices.contains(item.tag) {
+            ChromePreview.theme = NotchTheme.allCases[item.tag]
+            ChromePreview.invisible = false
+        } else {
+            schedulePreviewRestore()
+            return
+        }
+        ChromePreview.size = nil
+        ChromePreview.edge = nil
+        ChromePreview.forcePresetOffset = false
+        applyPreview(leavingConceal: leavingConceal)
+    }
+
+    private func previewSizeItem(_ item: NSMenuItem) {
+        guard NotchSize.allCases.indices.contains(item.tag) else {
+            schedulePreviewRestore()
+            return
+        }
+        let leavingConceal = ChromePreview.invisibleAffectsConcealment
+        ChromePreview.theme = nil
+        ChromePreview.invisible = nil
+        ChromePreview.size = NotchSize.allCases[item.tag]
+        ChromePreview.edge = nil
+        ChromePreview.forcePresetOffset = false
+        applyPreview(leavingConceal: leavingConceal)
+    }
+
+    private func previewPositionItem(_ item: NSMenuItem) {
+        guard item.action == #selector(chooseEdge(_:)) else {
+            schedulePreviewRestore()
+            return
+        }
+        let leavingConceal = ChromePreview.invisibleAffectsConcealment
+        ChromePreview.theme = nil
+        ChromePreview.invisible = nil
+        ChromePreview.size = nil
+        ChromePreview.edge = edgeForTag(item.tag)
+        ChromePreview.forcePresetOffset = true
+        applyPreview(leavingConceal: leavingConceal)
+    }
+
+    /// Relayout immediately. Refresh concealment only when Invisible flips,
+    /// including when a size or position hover leaves a theme preview.
+    private func applyPreview(leavingConceal: Bool) {
+        ChromePreview.prefersInstantFrame = true
         PillPlacement.postChange()
+        ChromePreview.prefersInstantFrame = false
+        if leavingConceal || ChromePreview.invisibleAffectsConcealment {
+            FullscreenWatcher.shared.refresh()
+        }
+    }
+
+    private func edgeForTag(_ tag: Int) -> PillEdge {
+        switch tag {
+        case 1: return .bottomCenter
+        case 2: return .leftMid
+        case 3: return .rightMid
+        default: return .topCenter
+        }
+    }
+
+    /// Write the clicked value. The overlay is cleared first so setters store
+    /// the committed choice, not the hover.
+    private func commitMenuChoice(_ body: () -> Void) {
+        cancelPreviewRestore()
+        committingMenuChoice = true
+        defer { committingMenuChoice = false }
+        let hoverDroveConceal = ChromePreview.invisibleAffectsConcealment
+        let cinemaBefore = ChromePreview.committedInvisible
+        ChromePreview.clear()
+        body()
+        let cinemaAfter = ChromePreview.committedInvisible
+        ChromePreview.publishCleared(concealChanged: hoverDroveConceal || cinemaBefore != cinemaAfter)
+    }
+
+    private func schedulePreviewRestore() {
+        if committingMenuChoice { return }
+        previewRestore?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.restorePreview()
+        }
+        previewRestore = work
+        DispatchQueue.main.async(execute: work)
+    }
+
+    private func cancelPreviewRestore() {
+        previewRestore?.cancel()
+        previewRestore = nil
+    }
+
+    /// Leave without a click: put the live notch back. A commit in this turn
+    /// has already cleared the overlay, so this does nothing.
+    private func restorePreview() {
+        previewRestore = nil
+        if committingMenuChoice || !ChromePreview.isActive { return }
+        let concealChanged = ChromePreview.invisibleAffectsConcealment
+        ChromePreview.clear()
+        ChromePreview.publishCleared(concealChanged: concealChanged)
     }
 
     /// Display exists only when more than one screen is attached.
@@ -325,6 +468,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         PinExpanded: \(PillPlacement.pinExpanded)
         DiscreetMode: always-on opacity \(String(format: "%.2f", Double(PillPlacement.discreetOpacity))) idle \(String(format: "%.2f", PillPlacement.idleDelay))
         NotchTheme: \(PillPlacement.theme.rawValue) size \(PillPlacement.size.rawValue) hitZone \(PillPlacement.hitZone.rawValue)
+        MenuBarHeight: \(String(format: "%.1f", Double(MenuBarHeight.current))) (S depth matches this band; M depth \(String(format: "%.1f", Double(ZonePolicy.depth * ZonePolicy.legacySmallScale))))
         RevealDelay: \(String(format: "%.2f", PillPlacement.revealDelay)) FullscreenHideDelay: \(String(format: "%.2f", PillPlacement.fullscreenHideDelay))
         Focus: phase \(String(describing: FocusSession.shared.phase)) elapsed \(String(format: "%.0f", FocusSession.shared.displayElapsed))s label \(FocusSession.shared.notchLabel)
         Fullscreen: \(FullscreenWatcher.shared.diagnosticToken)

@@ -38,6 +38,47 @@ enum ZonePolicy {
 
     static var span: CGFloat { focusSpan + centerSpan + volumeSpan }
 
+    /// How far the collapsed notch hangs off the bezel, relative to `depth`.
+    enum NotchScaleTier: Equatable {
+        /// Depth equals the menu-bar band passed in (size S).
+        case menuBar
+        /// Pre-0.5.0 size S. That height is size M.
+        case legacySmall
+    }
+
+    /// Scale size S used before 0.5.0. `depth` × this is the old S height (now M).
+    static let legacySmallScale: CGFloat = 0.85
+
+    /// A measured menu-bar band outside this range is not a menu bar.
+    static func saneMenuBarHeight(_ measured: CGFloat) -> CGFloat {
+        if measured >= 12 && measured <= 64 { return measured }
+        return 24
+    }
+
+    /// Uniform scale for span and depth. Size S’s depth is the menu bar.
+    static func scale(for tier: NotchScaleTier, menuBarHeight: CGFloat) -> CGFloat {
+        switch tier {
+        case .menuBar:
+            return saneMenuBarHeight(menuBarHeight) / depth
+        case .legacySmall:
+            return legacySmallScale
+        }
+    }
+
+    /// Protrusion from the attaching edge. On the top edge this is the notch height.
+    static func protrusion(for tier: NotchScaleTier, menuBarHeight: CGFloat) -> CGFloat {
+        scale(for: tier, menuBarHeight: menuBarHeight) * depth
+    }
+
+    /// How far a pinned top-center strip sits below the top of the screen.
+    /// `menuBarReserved` is `frame.maxY - visibleFrame.maxY` on that display
+    /// (0 when it is not showing a menu bar). The strip's top edge then meets
+    /// the bottom of the menu bar, so the menus stay clickable.
+    static func pinnedTopDrop(menuBarReserved: CGFloat) -> CGFloat {
+        guard menuBarReserved.isFinite, menuBarReserved > 0 else { return 0 }
+        return menuBarReserved
+    }
+
     /// Hover-expand is the center tab only. Wings and the slider never open the stream.
     static func expandsTouchBar(_ zone: ZoneID?) -> Bool {
         zone == .center

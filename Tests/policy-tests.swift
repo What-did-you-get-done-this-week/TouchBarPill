@@ -195,6 +195,29 @@ enum PolicyTests {
         check(!ZonePolicy.mayArmCollapse(expanded: true, pinned: true, dragging: false), "pin blocks arming collapse")
         check(!ZonePolicy.mayArmCollapse(expanded: false, pinned: false, dragging: false), "collapsed strip cannot arm collapse")
 
+        let bar: CGFloat = 25
+        let smallScale = ZonePolicy.scale(for: .menuBar, menuBarHeight: bar)
+        let mediumScale = ZonePolicy.scale(for: .legacySmall, menuBarHeight: bar)
+        check(abs(ZonePolicy.protrusion(for: .menuBar, menuBarHeight: bar) - 25) < 0.01, "S depth matches the menu bar")
+        check(
+            abs(ZonePolicy.protrusion(for: .legacySmall, menuBarHeight: bar) - ZonePolicy.depth * 0.85) < 0.01,
+            "M depth is the pre-0.5.0 S height"
+        )
+        check(abs(ZonePolicy.legacySmallScale - 0.85) < 0.001, "legacy small scale stays 0.85")
+        let smallTop = ZonePolicy.visualSize(edge: .top, scale: smallScale)
+        check(abs(smallTop.height - 25) < 0.01, "top S height is the menu bar")
+        let mediumTop = ZonePolicy.visualSize(edge: .top, scale: mediumScale)
+        check(abs(mediumTop.height - ZonePolicy.depth * 0.85) < 0.01, "top M height is old S")
+        check(abs(mediumTop.width - ZonePolicy.span * 0.85) < 0.01, "M width is old S width")
+        let smallSide = ZonePolicy.visualSize(edge: .left, scale: smallScale)
+        check(abs(smallSide.width - 25) < 0.01, "side S thickness is the menu bar")
+        check(ZonePolicy.protrusion(for: .menuBar, menuBarHeight: 0) == 24, "a missing menu bar falls back to 24")
+        check(ZonePolicy.protrusion(for: .menuBar, menuBarHeight: 200) == 24, "an absurd menu bar falls back to 24")
+        check(abs(ZonePolicy.protrusion(for: .menuBar, menuBarHeight: 37) - 37) < 0.01, "a taller bar is used as S")
+        check(ZonePolicy.pinnedTopDrop(menuBarReserved: 25) == 25, "pinned top strip drops by the menu bar")
+        check(ZonePolicy.pinnedTopDrop(menuBarReserved: 0) == 0, "a hidden menu bar does not invent a gap")
+        check(ZonePolicy.pinnedTopDrop(menuBarReserved: -4) == 0, "a negative reserve is not a drop")
+
         if failures.isEmpty {
             print("policy-tests ok")
         } else {
