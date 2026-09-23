@@ -58,22 +58,19 @@ enum ZonePolicy {
 
     /// Volume-wing scroll steps. Positive raises output toward 100%.
     ///
-    /// Physical contract, MacBook trackpad, natural scrolling ON (the default,
-    /// `invertedFromDevice == true`):
+    /// Physical contract, MacBook trackpad:
     /// - Fingers toward the top of the trackpad, away from the user and toward
     ///   the lid, raise system volume. The bar fills upward toward 100%.
     /// - Fingers toward the bottom of the trackpad, toward the user, lower
     ///   volume. The bar empties toward 0%.
     ///
-    /// AppKit `scrollingDeltaY` is a content delta in a y-up view. Natural
-    /// scrolling already flips the device delta, so a positive `scrollingDeltaY`
-    /// is content moving up — the fingers moving away from the user. Keep that
-    /// sign. 0.4.6 negated it whenever `isDirectionInvertedFromDevice` was true,
-    /// so fingers-away lowered the volume.
+    /// 0.4.7 kept the natural-scrolling sign (positive `scrollingDeltaY` raised
+    /// volume) and negated only when natural scrolling was off. Arturo-validated:
+    /// after 0.4.7 user reported inverted; 0.4.8 flips once.
     ///
-    /// Natural scrolling off reports the legacy device delta (opposite the
-    /// fingers). Negate only that case, so fingers-away still raises. Momentum
-    /// events keep the gesture's sign (`momentumPhase` is not flipped).
+    /// The legacy-device undo for natural scrolling off stays. The single extra
+    /// negation is the final step, so it is not applied twice. Momentum events
+    /// keep the gesture's sign (`momentumPhase` is not flipped).
     static func volumeScrollSteps(
         deltaX: CGFloat,
         deltaY: CGFloat,
@@ -95,7 +92,8 @@ enum ZonePolicy {
         } else {
             raw = dominant > 0 ? 2 : -2
         }
-        let steps = raw
+        // Arturo-validated: after 0.4.7 user reported inverted; 0.4.8 flips once.
+        let steps = -raw
         guard abs(steps) > 0.04 else { return nil }
         return steps
     }

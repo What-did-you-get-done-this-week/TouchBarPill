@@ -1,4 +1,4 @@
-COMO ABRIR — TouchBarPill 0.4.7
+COMO ABRIR — TouchBarPill 0.4.8
 ================================
 
 Qué es
@@ -12,7 +12,7 @@ No hay ventana de Preferencias. Todo está en el menú de la barra de menú.
 Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
-2. Abre TouchBarPill-0.4.7.app en el Escritorio.
+2. Abre TouchBarPill-0.4.8.app en el Escritorio.
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
 

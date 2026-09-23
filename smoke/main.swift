@@ -96,16 +96,15 @@ enum ZoneSmoke {
         let early = ZonePolicy.secondsUntilNextMinute(elapsed: 30)
         check(early > 20, "mid-minute wait is not one second")
 
-        // Natural scrolling ON: positive scrollingDeltaY is fingers away from the user.
-        let naturalAway = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 10, precise: true, invertedFromDevice: true)
-        let naturalToward = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: -10, precise: true, invertedFromDevice: true)
-        check((naturalAway ?? 0) > 0, "natural-on fingers away (positive deltaY) raises volume")
-        check((naturalToward ?? 0) < 0, "natural-on fingers toward the user (negative deltaY) lowers volume")
-        // Natural scrolling OFF reports the opposite device delta. Undo only that.
-        let legacyAway = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: -10, precise: true, invertedFromDevice: false)
-        let legacyToward = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 10, precise: true, invertedFromDevice: false)
-        check((legacyAway ?? 0) > 0, "natural-off fingers away (negative deltaY) raises volume")
-        check((legacyToward ?? 0) < 0, "natural-off fingers toward the user (positive deltaY) lowers volume")
+        // Arturo-validated: after 0.4.7 user reported inverted; 0.4.8 flips once.
+        let naturalPositive = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 10, precise: true, invertedFromDevice: true)
+        let naturalNegative = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: -10, precise: true, invertedFromDevice: true)
+        check((naturalPositive ?? 0) < 0, "0.4.8 flip: natural-on positive deltaY is a downward step")
+        check((naturalNegative ?? 0) > 0, "0.4.8 flip: natural-on negative deltaY is an upward step")
+        let legacyNegative = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: -10, precise: true, invertedFromDevice: false)
+        let legacyPositive = ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 10, precise: true, invertedFromDevice: false)
+        check((legacyNegative ?? 0) < 0, "0.4.8 flip: natural-off negative deltaY is a downward step")
+        check((legacyPositive ?? 0) > 0, "0.4.8 flip: natural-off positive deltaY is an upward step")
         check(ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 0.1, precise: true, invertedFromDevice: true) == nil, "tiny precise delta is ignored")
 
         let track = CGRect(x: 10, y: 20, width: 12, height: 80)

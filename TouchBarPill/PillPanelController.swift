@@ -527,8 +527,8 @@ final class PillPanelController: NSObject {
         guard root.pointerOverVolume(slop: 6) else { return }
         if event.timestamp == lastScrollStamp { return }
         lastScrollStamp = event.timestamp
-        // Natural scrolling on: positive scrollingDeltaY is fingers away from
-        // the user and must raise volume. Mapping lives in volumeScrollSteps.
+        // Arturo-validated: after 0.4.7 user reported inverted; 0.4.8 flips once.
+        // The wing applies that step with no second negation.
         guard let steps = ZonePolicy.volumeScrollSteps(
             deltaX: event.scrollingDeltaX,
             deltaY: event.scrollingDeltaY,
@@ -1741,7 +1741,7 @@ final class CollapsedChromeView: NSView {
         let title = session.notchLabel
         let minutes = session.phase != .idle
         let size = (minutes ? 17 : 15.5) * scale
-        let weight: NSFont.Weight = minutes ? .semibold : .medium
+        let weight: NSFont.Weight = minutes ? .medium : .regular
         let alpha = session.labelAlpha
         if edge.isVerticalEdge && !minutes {
             drawRotated(title, in: rect, size: size, weight: weight, alpha: alpha)
@@ -1811,7 +1811,7 @@ final class CollapsedChromeView: NSView {
 
     private func drawSymbol(_ name: String, in rect: CGRect, pointSize: CGFloat, fallback: SymbolFallback) {
         guard rect.width > 2, rect.height > 2 else { return }
-        let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
+        let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
             .applying(NSImage.SymbolConfiguration(hierarchicalColor: NSColor.white.withAlphaComponent(0.94)))
         if let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config) {
             let side = pointSize * 1.2
@@ -1856,7 +1856,7 @@ final class CollapsedChromeView: NSView {
             triangle.fill()
         case .speaker:
             let mark = (SystemVolume.showsCrossedSpeaker() ? "🔇" : "♪") as NSString
-            let font = NotchFont(size: side, weight: .semibold)
+            let font = NotchFont(size: side, weight: .medium)
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
             let textSize = mark.size(withAttributes: attributes)
             mark.draw(at: NSPoint(x: rect.midX - textSize.width / 2, y: rect.midY - textSize.height / 2), withAttributes: attributes)
@@ -1869,7 +1869,7 @@ final class CollapsedChromeView: NSView {
 func drawSpeakerMark(crossed: Bool, in rect: CGRect, pointSize: CGFloat) {
     guard rect.width > 2, rect.height > 2 else { return }
     let name = crossed ? "speaker.slash.fill" : "speaker.wave.2.fill"
-    let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
+    let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
         .applying(NSImage.SymbolConfiguration(hierarchicalColor: NSColor.white.withAlphaComponent(0.94)))
     if let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config) {
         let side = min(rect.width - 2, rect.height - 2, pointSize * 1.35)
@@ -1880,7 +1880,7 @@ func drawSpeakerMark(crossed: Bool, in rect: CGRect, pointSize: CGFloat) {
         return
     }
     let mark = (crossed ? "🔇" : "♪") as NSString
-    let font = NotchFont(size: min(pointSize, rect.height * 0.8), weight: .semibold)
+    let font = NotchFont(size: min(pointSize, rect.height * 0.8), weight: .medium)
     let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
     let textSize = mark.size(withAttributes: attributes)
     mark.draw(
@@ -1917,7 +1917,7 @@ final class FallbackView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        titleField.font = .systemFont(ofSize: PillMetrics.fallbackTitleFont, weight: .semibold)
+        titleField.font = .systemFont(ofSize: PillMetrics.fallbackTitleFont, weight: .medium)
         titleField.textColor = NSColor.white.withAlphaComponent(0.94)
         bodyField.font = .systemFont(ofSize: PillMetrics.fallbackBodyFont)
         bodyField.textColor = NSColor.white.withAlphaComponent(0.68)
