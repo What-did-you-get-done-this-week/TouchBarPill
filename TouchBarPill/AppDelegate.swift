@@ -193,7 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func togglePin() {
         // The hover already shows the next state. A click without a hover toggles the saved pin.
         let next = ChromePreview.pin ?? !ChromePreview.committedPin
-        commitMenuChoice {
+        commitMenuChoice(animatedFrame: ZonePolicy.animatesMenuFrame(.pin)) {
             PillPlacement.pinExpanded = next
         }
     }
@@ -232,7 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func chooseEdge(_ sender: NSMenuItem) {
         let edge = edgeForTag(sender.tag)
-        commitMenuChoice {
+        commitMenuChoice(animatedFrame: ZonePolicy.animatesMenuFrame(.position)) {
             PillPlacement.storeEdge(edge)
         }
     }
@@ -256,7 +256,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ChromePreview.edge = nil
         ChromePreview.forcePresetOffset = false
         ChromePreview.pin = nil
-        applyPreview(leavingConceal: leavingConceal, restorePin: restorePin)
+        applyPreview(
+            leavingConceal: leavingConceal,
+            restorePin: restorePin,
+            animatedFrame: ZonePolicy.animatesMenuFrame(.theme)
+        )
     }
 
     private func previewSizeItem(_ item: NSMenuItem) {
@@ -272,7 +276,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ChromePreview.edge = nil
         ChromePreview.forcePresetOffset = false
         ChromePreview.pin = nil
-        applyPreview(leavingConceal: leavingConceal, restorePin: restorePin)
+        applyPreview(
+            leavingConceal: leavingConceal,
+            restorePin: restorePin,
+            animatedFrame: ZonePolicy.animatesMenuFrame(.notchSize)
+        )
     }
 
     private func previewPositionItem(_ item: NSMenuItem) {
@@ -288,7 +296,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ChromePreview.edge = edgeForTag(item.tag)
         ChromePreview.forcePresetOffset = true
         ChromePreview.pin = nil
-        applyPreview(leavingConceal: leavingConceal, restorePin: restorePin)
+        applyPreview(
+            leavingConceal: leavingConceal,
+            restorePin: restorePin,
+            animatedFrame: ZonePolicy.animatesMenuFrame(.position)
+        )
     }
 
     /// Hover shows the other pin state on the live strip. Leaving restores.
@@ -309,17 +321,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ChromePreview.edge = nil
         ChromePreview.forcePresetOffset = false
         ChromePreview.pin = next
-        applyPreview(leavingConceal: leavingConceal)
+        applyPreview(
+            leavingConceal: leavingConceal,
+            animatedFrame: ZonePolicy.animatesMenuFrame(.pin)
+        )
     }
 
     /// Relayout immediately. Refresh concealment only when Invisible flips,
     /// including when a size or position hover leaves a theme preview.
-    /// `restorePin` snaps off a pin hover in the same frame as the new preview.
-    private func applyPreview(leavingConceal: Bool, restorePin: Bool = false) {
-        ChromePreview.prefersInstantFrame = true
+    /// `restorePin` returns a pin hover to the saved pin on this same post.
+    /// `animatedFrame` is position and pin. Theme and notch size stay instant.
+    private func applyPreview(leavingConceal: Bool, restorePin: Bool = false, animatedFrame: Bool = false) {
+        ChromePreview.prefersInstantFrame = !animatedFrame
+        ChromePreview.menuDrivenFrame = true
         ChromePreview.restoringPin = restorePin
         PillPlacement.postChange()
         ChromePreview.prefersInstantFrame = false
+        ChromePreview.menuDrivenFrame = false
         ChromePreview.restoringPin = false
         if leavingConceal || ChromePreview.invisibleAffectsConcealment {
             FullscreenWatcher.shared.refresh()
@@ -336,8 +354,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Write the clicked value. The overlay is cleared first so setters store
-    /// the committed choice, not the hover.
-    private func commitMenuChoice(_ body: () -> Void) {
+    /// the committed choice, not the hover. Position and pin pass
+    /// `animatedFrame` so the commit travels; theme and size jump.
+    private func commitMenuChoice(animatedFrame: Bool = false, _ body: () -> Void) {
         cancelPreviewRestore()
         committingMenuChoice = true
         defer { committingMenuChoice = false }
@@ -346,7 +365,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ChromePreview.clear()
         body()
         let cinemaAfter = ChromePreview.committedInvisible
-        ChromePreview.publishCleared(concealChanged: hoverDroveConceal || cinemaBefore != cinemaAfter)
+        ChromePreview.publishCleared(
+            concealChanged: hoverDroveConceal || cinemaBefore != cinemaAfter,
+            animatedFrame: animatedFrame
+        )
     }
 
     private func schedulePreviewRestore() {
@@ -371,8 +393,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if committingMenuChoice || !ChromePreview.isActive { return }
         let concealChanged = ChromePreview.invisibleAffectsConcealment
         let restorePin = ChromePreview.pin != nil
+        let animatedFrame = ZonePolicy.animatesMenuFrameRestore(
+            hasEdge: ChromePreview.edge != nil || ChromePreview.forcePresetOffset,
+            hasPin: ChromePreview.pin != nil
+        )
         ChromePreview.clear()
-        ChromePreview.publishCleared(concealChanged: concealChanged, restorePin: restorePin)
+        ChromePreview.publishCleared(
+            concealChanged: concealChanged,
+            restorePin: restorePin,
+            animatedFrame: animatedFrame
+        )
     }
 
     /// Display exists only when more than one screen is attached.

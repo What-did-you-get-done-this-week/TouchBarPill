@@ -679,6 +679,9 @@ final class PillPanelController: NSObject {
     }
 
     private func animate(to target: NSRect, expanding: Bool) {
+        // Theme and notch size set this and jump. Position and pin do not,
+        // so they keep the expand/travel animation below.
+        let menuDriven = ChromePreview.menuDrivenFrame
         if ChromePreview.prefersInstantFrame {
             animating = false
             chromeGeneration += 1
@@ -719,7 +722,11 @@ final class PillPanelController: NSObject {
             self.root.refreshFocusChrome()
             self.refreshChromeOpacity(animated: true)
             if !expanding {
-                self.syncPointer()
+                // Same guard as the instant path: a menu-driven collapse must
+                // not sample the status item and reopen the strip.
+                if !menuDriven {
+                    self.syncPointer()
+                }
                 self.scheduleFullscreenConcealIfNeeded()
             }
         }

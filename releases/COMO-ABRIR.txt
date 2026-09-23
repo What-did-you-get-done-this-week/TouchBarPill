@@ -1,4 +1,4 @@
-COMO ABRIR — TouchBarPill 0.5.1
+COMO ABRIR — TouchBarPill 0.5.2
 ================================
 
 Qué es
@@ -12,7 +12,7 @@ No hay ventana de Preferencias. Todo está en el menú de la barra de menú.
 Instalar / abrir
 ----------------
 1. Cierra Touché si está abierto (compiten por el mismo simulador).
-2. Abre TouchBarPill.app en el Escritorio (una sola app, versión 0.5.1).
+2. Abre TouchBarPill.app en el Escritorio (una sola app, versión 0.5.2).
    Si quedan copias TouchBarPill-0.4.x.app, o no se puede sustituir TouchBarPill.app, abre Install-TouchBarPill.command en el Escritorio: cierra TouchBarPill, borra las TouchBarPill*.app viejas, copia la build a TouchBarPill.app y la abre.
 3. Aparece el icono en la barra de menú y la muesca en el borde.
 4. Si Gatekeeper avisa: clic derecho → Abrir → Abrir.
@@ -64,7 +64,7 @@ Detección de la ventana: solo el marco en pantalla (CGWindowList, bounds). No l
 Aspecto
 -------
 - Tema, en el menú de estado → Tema: Negro, Grafito, Acento suave. Debajo, Invisible.
-- Tamaño: S / M. S mide lo mismo que la barra de menú de esa pantalla y no asoma por debajo. M es el tamaño pequeño anterior. Pasar el puntero por un tema, un tamaño, una posición o Fijar Touch Bar lo previsualiza; el clic lo guarda. Al salir sin clic vuelve lo guardado. Con centro superior, la tira fijada (también al pasar el puntero) queda debajo de la barra de menú.
+- Tamaño: S / M. S mide lo mismo que la barra de menú de esa pantalla y no asoma por debajo. M es el tamaño pequeño anterior. Pasar el puntero por un tema, un tamaño, una posición o Fijar Touch Bar lo previsualiza; el clic lo guarda. Al salir sin clic vuelve lo guardado. Posición y Fijar Touch Bar se mueven con la animación de la ventana (al pasar el puntero, al hacer clic y al salir). Tema y tamaño cambian al instante. Con centro superior, la tira fijada (también al pasar el puntero) queda debajo de la barra de menú.
 - La muesca en reposo siempre se atenúa (modo discreto fijo).
 
 Posición y fijar

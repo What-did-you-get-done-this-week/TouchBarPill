@@ -116,10 +116,15 @@ enum ChromePreview {
     static var pin: Bool?
     /// Position presets preview with no drag offset.
     static var forcePresetOffset = false
-    /// Menu scrubbing should jump, not animate, so leave-restore is immediate.
+    /// Theme and notch size jump. Position and pin leave this false so they
+    /// reuse `NSAnimationContext` and `panel.animator().setFrame`.
     static var prefersInstantFrame = false
+    /// True during the synchronous status-menu post. The frame animation's
+    /// completion must not sample the pointer: the cursor is on the menu,
+    /// which can overlap the notch and undo a pin-off preview.
+    static var menuDrivenFrame = false
     /// True only on the post that just cleared a pin hover, so the strip
-    /// snaps back to the saved pin instead of waiting out leave-collapse.
+    /// returns to the saved pin instead of waiting out leave-collapse.
     static var restoringPin = false
 
     static var isActive: Bool {
@@ -154,12 +159,16 @@ enum ChromePreview {
     /// Relayout after the overlay is gone. `concealChanged` is captured by the
     /// caller before `clear()` because the overlay is already gone here.
     /// Size and position hovers pass false so they do not scan windows.
-    /// `restorePin` snaps the strip back to the saved pin on this frame.
-    static func publishCleared(concealChanged: Bool, restorePin: Bool = false) {
-        prefersInstantFrame = true
+    /// `restorePin` returns the strip to the saved pin on this frame.
+    /// `animatedFrame` is position and pin (hover, commit, and leave). Theme
+    /// and notch size pass false and jump.
+    static func publishCleared(concealChanged: Bool, restorePin: Bool = false, animatedFrame: Bool = false) {
+        prefersInstantFrame = !animatedFrame
+        menuDrivenFrame = true
         restoringPin = restorePin
         PillPlacement.postChange()
         prefersInstantFrame = false
+        menuDrivenFrame = false
         restoringPin = false
         if concealChanged {
             FullscreenWatcher.shared.refresh()

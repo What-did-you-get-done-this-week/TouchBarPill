@@ -103,6 +103,30 @@ enum ZonePolicy {
         return screenMaxY - stripHeight - drop
     }
 
+    /// Which status-menu row is driving a live preview, commit, or leave.
+    enum MenuFramePreview: Equatable {
+        case position
+        case pin
+        case theme
+        case notchSize
+    }
+
+    /// Position and pin travel with the pre-preview window animation
+    /// (`NSAnimationContext` + `animator().setFrame`). Theme and notch size jump.
+    static func animatesMenuFrame(_ preview: MenuFramePreview) -> Bool {
+        switch preview {
+        case .position, .pin:
+            return true
+        case .theme, .notchSize:
+            return false
+        }
+    }
+
+    /// Leaving a position or pin hover animates back. Leaving theme or size jumps.
+    static func animatesMenuFrameRestore(hasEdge: Bool, hasPin: Bool) -> Bool {
+        hasEdge || hasPin
+    }
+
     /// What a pin hover, or the frame that clears one, should do to the strip.
     enum PinStripMotion: Equatable {
         /// Open now. At top center the pinned drop applies.

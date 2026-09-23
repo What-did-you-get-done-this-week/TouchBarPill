@@ -269,6 +269,22 @@ enum PolicyTests {
             ZonePolicy.pinStripMotion(overlay: nil, committed: true, expanded: true, restoringHover: false) == .unchanged,
             "committing pin on leaves an open strip open"
         )
+        check(ZonePolicy.animatesMenuFrame(.position), "position hover, click, and leave animate")
+        check(ZonePolicy.animatesMenuFrame(.pin), "pin hover, click, and leave animate")
+        check(!ZonePolicy.animatesMenuFrame(.theme), "theme preview stays instant")
+        check(!ZonePolicy.animatesMenuFrame(.notchSize), "notch size preview stays instant")
+        check(
+            ZonePolicy.animatesMenuFrameRestore(hasEdge: true, hasPin: false),
+            "leaving a position hover animates back"
+        )
+        check(
+            ZonePolicy.animatesMenuFrameRestore(hasEdge: false, hasPin: true),
+            "leaving a pin hover animates back"
+        )
+        check(
+            !ZonePolicy.animatesMenuFrameRestore(hasEdge: false, hasPin: false),
+            "leaving theme or size does not animate the frame"
+        )
 
         if failures.isEmpty {
             print("policy-tests ok")
