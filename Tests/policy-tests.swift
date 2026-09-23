@@ -218,6 +218,58 @@ enum PolicyTests {
         check(ZonePolicy.pinnedTopDrop(menuBarReserved: 0) == 0, "a hidden menu bar does not invent a gap")
         check(ZonePolicy.pinnedTopDrop(menuBarReserved: -4) == 0, "a negative reserve is not a drop")
 
+        let pinnedY = ZonePolicy.expandedTopOriginY(
+            pinOn: true, screenMaxY: 900, visibleMaxY: 875, stripHeight: 40, unpinnedGap: 31
+        )
+        check(abs(pinnedY - 835) < 0.01, "pinned top origin sits one strip below the menu bar")
+        check(abs((pinnedY + 40) - 875) < 0.01, "pinned top strip maxY is visibleFrame.maxY")
+        check(pinnedY + 40 <= 875, "pinned strip does not cover the menu bar")
+        let unpinnedY = ZonePolicy.expandedTopOriginY(
+            pinOn: false, screenMaxY: 900, visibleMaxY: 875, stripHeight: 40, unpinnedGap: 31
+        )
+        check(abs(unpinnedY - 829) < 0.01, "unpinned top expand keeps its gap")
+        let hiddenBarY = ZonePolicy.expandedTopOriginY(
+            pinOn: true, screenMaxY: 900, visibleMaxY: 900, stripHeight: 40, unpinnedGap: 6
+        )
+        check(abs(hiddenBarY - 860) < 0.01, "pin with no menu bar does not invent a gap")
+
+        check(
+            ZonePolicy.pinStripMotion(overlay: true, committed: false, expanded: false, restoringHover: false) == .holdOpen,
+            "hover pin on opens a collapsed strip"
+        )
+        check(
+            ZonePolicy.pinStripMotion(overlay: true, committed: false, expanded: true, restoringHover: false) == .unchanged,
+            "hover pin on keeps an open strip and repositions it"
+        )
+        check(
+            ZonePolicy.pinStripMotion(overlay: false, committed: true, expanded: true, restoringHover: false) == .holdClosed,
+            "hover pin off closes the strip immediately"
+        )
+        check(
+            ZonePolicy.pinStripMotion(overlay: false, committed: true, expanded: false, restoringHover: false) == .unchanged,
+            "hover pin off leaves a collapsed notch collapsed"
+        )
+        check(
+            ZonePolicy.pinStripMotion(overlay: nil, committed: false, expanded: true, restoringHover: true) == .holdClosed,
+            "leaving the pin row restores an unpinned notch immediately"
+        )
+        check(
+            ZonePolicy.pinStripMotion(overlay: nil, committed: true, expanded: false, restoringHover: true) == .holdOpen,
+            "leaving the pin row restores a pinned strip"
+        )
+        check(
+            ZonePolicy.pinStripMotion(overlay: nil, committed: false, expanded: true, restoringHover: false) == .unchanged,
+            "a size hover does not snap an unpinned strip shut"
+        )
+        check(
+            ZonePolicy.pinStripMotion(overlay: nil, committed: true, expanded: false, restoringHover: false) == .holdOpen,
+            "committing pin on opens the strip"
+        )
+        check(
+            ZonePolicy.pinStripMotion(overlay: nil, committed: true, expanded: true, restoringHover: false) == .unchanged,
+            "committing pin on leaves an open strip open"
+        )
+
         if failures.isEmpty {
             print("policy-tests ok")
         } else {

@@ -79,6 +79,60 @@ enum ZonePolicy {
         return menuBarReserved
     }
 
+    /// Top-center expanded drop. Pin on (committed or a hover preview) uses the
+    /// menu-bar reserve. Pin off keeps the unpinned gap, including 0.
+    static func expandedTopDrop(pinOn: Bool, menuBarReserved: CGFloat, unpinnedGap: CGFloat) -> CGFloat {
+        if pinOn { return pinnedTopDrop(menuBarReserved: menuBarReserved) }
+        return unpinnedGap
+    }
+
+    /// Origin Y of the top-center expanded strip. With pin on, the strip's top
+    /// edge is `visibleMaxY` (just under the menu bar) and does not cover it.
+    static func expandedTopOriginY(
+        pinOn: Bool,
+        screenMaxY: CGFloat,
+        visibleMaxY: CGFloat,
+        stripHeight: CGFloat,
+        unpinnedGap: CGFloat
+    ) -> CGFloat {
+        let drop = expandedTopDrop(
+            pinOn: pinOn,
+            menuBarReserved: screenMaxY - visibleMaxY,
+            unpinnedGap: unpinnedGap
+        )
+        return screenMaxY - stripHeight - drop
+    }
+
+    /// What a pin hover, or the frame that clears one, should do to the strip.
+    enum PinStripMotion: Equatable {
+        /// Open now. At top center the pinned drop applies.
+        case holdOpen
+        /// Close now, back to the notch. Do not wait out leave-collapse.
+        case holdClosed
+        /// Leave open/closed as they are. Normal leave-collapse still applies.
+        case unchanged
+    }
+
+    /// `overlay` is the Pin menu hover (`nil` when that row is not previewing).
+    /// `restoringHover` is the frame after the hover ends without a click.
+    /// A hover of pin-on opens the strip; a hover of pin-off closes it.
+    /// Leaving snaps back to the committed pin instead of the 0.4s collapse.
+    /// Other hovers (`overlay == nil` and not restoring) do not touch this.
+    static func pinStripMotion(
+        overlay: Bool?,
+        committed: Bool,
+        expanded: Bool,
+        restoringHover: Bool
+    ) -> PinStripMotion {
+        let effective = overlay ?? committed
+        if effective {
+            return expanded ? .unchanged : .holdOpen
+        }
+        let pinHoverFrame = overlay != nil || restoringHover
+        if pinHoverFrame && expanded { return .holdClosed }
+        return .unchanged
+    }
+
     /// Hover-expand is the center tab only. Wings and the slider never open the stream.
     static func expandsTouchBar(_ zone: ZoneID?) -> Bool {
         zone == .center

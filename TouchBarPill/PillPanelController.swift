@@ -679,6 +679,23 @@ final class PillPanelController: NSObject {
     }
 
     private func animate(to target: NSRect, expanding: Bool) {
+        if ChromePreview.prefersInstantFrame {
+            animating = false
+            chromeGeneration += 1
+            panel.orderFrontRegardless()
+            panel.setFrame(target, display: true)
+            panel.invalidateShadow()
+            if !expanding && !panel.frame.contains(NSEvent.mouseLocation) {
+                expanded = false
+                hovering = false
+                root.apply(mirror: mirror, expanded: false)
+            }
+            root.refreshFocusChrome()
+            refreshChromeOpacity(animated: false)
+            // The pointer is on the status menu. Sampling it here would treat
+            // the menu row as a notch hit and undo a pin-off preview.
+            return
+        }
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         let duration = reduceMotion ? 0.01 : (expanding ? 0.34 : 0.26)
         animating = true
@@ -839,11 +856,26 @@ final class PillPanelController: NSObject {
         guard !dragging, panel.isVisible else { return }
         guard let screen = DisplayList.resolved() else { return }
 
-        if PillPlacement.pinExpanded {
+        switch ZonePolicy.pinStripMotion(
+            overlay: ChromePreview.pin,
+            committed: ChromePreview.committedPin,
+            expanded: expanded,
+            restoringHover: ChromePreview.restoringPin
+        ) {
+        case .holdOpen:
             cancelCollapse()
-            if !expanded {
-                setExpanded(true)
-                return
+            setExpanded(true)
+            return
+        case .holdClosed:
+            cancelCollapse()
+            hovering = false
+            hoverZone = nil
+            root.setHotZone(nil)
+            setExpanded(false)
+            return
+        case .unchanged:
+            if PillPlacement.pinExpanded {
+                cancelCollapse()
             }
         }
 
@@ -1000,14 +1032,18 @@ final class PillPanelController: NSObject {
 
         switch PillPlacement.edge {
         case .topCenter:
-            // Pinned stays open, so it must sit under the menu bar. A hover
-            // expand is brief and keeps the previous top placement.
-            let drop = PillPlacement.pinExpanded
-                ? ZonePolicy.pinnedTopDrop(menuBarReserved: frame.maxY - visible.maxY)
-                : gap
+            // Pin on (saved or the Pin-row hover) sits under the menu bar.
+            // A brief unpinned hover-expand keeps the previous top placement.
+            let y = ZonePolicy.expandedTopOriginY(
+                pinOn: PillPlacement.pinExpanded,
+                screenMaxY: frame.maxY,
+                visibleMaxY: visible.maxY,
+                stripHeight: size.height,
+                unpinnedGap: gap
+            )
             return NSRect(
                 x: frame.midX - size.width / 2,
-                y: frame.maxY - size.height - drop,
+                y: y,
                 width: size.width,
                 height: size.height
             )

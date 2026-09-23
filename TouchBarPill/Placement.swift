@@ -106,25 +106,34 @@ enum MenuBarHeight {
 
 /// Hover preview for the status menu. Never written to UserDefaults.
 /// A click commits; leaving the item clears this and the live notch returns
-/// to the saved theme, size, position, and Invisible flag.
-/// Pin is not previewed.
+/// to the saved theme, size, position, pin, and Invisible flag.
 enum ChromePreview {
     static var theme: NotchTheme?
     static var invisible: Bool?
     static var size: NotchSize?
     static var edge: PillEdge?
+    /// Pin row hover. Nil uses the saved pin. True shows the strip pinned.
+    static var pin: Bool?
     /// Position presets preview with no drag offset.
     static var forcePresetOffset = false
     /// Menu scrubbing should jump, not animate, so leave-restore is immediate.
     static var prefersInstantFrame = false
+    /// True only on the post that just cleared a pin hover, so the strip
+    /// snaps back to the saved pin instead of waiting out leave-collapse.
+    static var restoringPin = false
 
     static var isActive: Bool {
-        theme != nil || invisible != nil || size != nil || edge != nil || forcePresetOffset
+        theme != nil || invisible != nil || size != nil || edge != nil || pin != nil || forcePresetOffset
     }
 
     /// Saved cinema flag, ignoring the overlay.
     static var committedInvisible: Bool {
         UserDefaults.standard.bool(forKey: PillPlacement.cinemaModeKey)
+    }
+
+    /// Saved pin, ignoring the overlay. The menu checkmark uses this.
+    static var committedPin: Bool {
+        UserDefaults.standard.bool(forKey: PillPlacement.pinKey)
     }
 
     /// True when the overlay would show or hide the notch differently than the saved flag.
@@ -138,16 +147,20 @@ enum ChromePreview {
         invisible = nil
         size = nil
         edge = nil
+        pin = nil
         forcePresetOffset = false
     }
 
     /// Relayout after the overlay is gone. `concealChanged` is captured by the
     /// caller before `clear()` because the overlay is already gone here.
     /// Size and position hovers pass false so they do not scan windows.
-    static func publishCleared(concealChanged: Bool) {
+    /// `restorePin` snaps the strip back to the saved pin on this frame.
+    static func publishCleared(concealChanged: Bool, restorePin: Bool = false) {
         prefersInstantFrame = true
+        restoringPin = restorePin
         PillPlacement.postChange()
         prefersInstantFrame = false
+        restoringPin = false
         if concealChanged {
             FullscreenWatcher.shared.refresh()
         }
@@ -266,8 +279,13 @@ enum PillPlacement {
         return NSScreen.screens.contains { DisplayList.id(of: $0) == saved }
     }
 
+    /// Saved pin, unless a menu hover is showing the other state.
+    /// The setter always writes the committed value, never the overlay.
     static var pinExpanded: Bool {
-        get { UserDefaults.standard.bool(forKey: pinKey) }
+        get {
+            if let preview = ChromePreview.pin { return preview }
+            return UserDefaults.standard.bool(forKey: pinKey)
+        }
         set { UserDefaults.standard.set(newValue, forKey: pinKey) }
     }
 
