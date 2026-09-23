@@ -78,12 +78,18 @@ final class PillPanelController: NSObject {
     private let root: PillRootView
     private var expanded = false {
         didSet {
-            if !expanded { latchedBrightnessNorm = nil }
+            if !expanded {
+                latchedBrightnessNorm = nil
+                latchedVolumeNorm = nil
+            }
         }
     }
     /// Last Control Strip brightness slot (normalized, top-left, y down).
-    /// Kept while a hover highlight hides the sun. Cleared when the strip closes.
+    /// Kept while a hover highlight hides the sun and that patch stays lit.
+    /// Cleared when the strip closes or the patch goes dark.
     private var latchedBrightnessNorm: CGRect?
+    /// Last Control Strip volume slot. Same lifetime as the brightness slot.
+    private var latchedVolumeNorm: CGRect?
     private var brightnessLatchTick: TimeInterval = 0
     private var animating = false
     private var hovering = false
@@ -177,12 +183,16 @@ final class PillPanelController: NSObject {
         }
         // Events that hit this panel never reach the global monitor.
         // Side tabs are thin; this catches the wheel even when the view misses it.
-        // On the expanded strip, the same monitor scrolls brightness only while
-        // the pointer is on the Control Strip sun. Other buttons, including
-        // volume, keep the event.
+        // On the expanded strip, scroll the Control Strip sun or the speaker
+        // beside it. The notch volume wing is a separate path, used only while
+        // the strip is collapsed. Other buttons keep the event.
         localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
             guard let self, self.panel.isVisible else { return event }
             if self.expanded {
+                if self.pointerOverMirroredVolume() {
+                    self.scrollExpandedVolume(event)
+                    return nil
+                }
                 guard self.pointerOverBrightness() else { return event }
                 self.scrollExpandedBrightness(event)
                 return nil
@@ -524,6 +534,10 @@ final class PillPanelController: NSObject {
         let apply = { [weak self] in
             guard let self, self.panel.isVisible else { return }
             if self.expanded {
+                if self.pointerOverMirroredVolume() {
+                    self.scrollExpandedVolume(event)
+                    return
+                }
                 self.scrollExpandedBrightness(event)
                 return
             }
@@ -575,6 +589,22 @@ final class PillPanelController: NSObject {
         _ = SystemBrightness.adjust(by: steps * SystemBrightness.step)
     }
 
+    /// Scroll on the mirrored Control Strip speaker. Clicks still go to the simulator.
+    /// Any axis uses the notch volume-wing mapping: fingers away raise volume,
+    /// fingers toward you lower it. The wing itself is not shown or changed.
+    private func scrollExpandedVolume(_ event: NSEvent) {
+        guard expanded, pointerOverMirroredVolume() else { return }
+        guard let steps = ZonePolicy.volumeScrollSteps(
+            deltaX: event.scrollingDeltaX,
+            deltaY: event.scrollingDeltaY,
+            precise: event.hasPreciseScrollingDeltas,
+            invertedFromDevice: event.isDirectionInvertedFromDevice
+        ) else { return }
+        if event.timestamp == lastScrollStamp { return }
+        lastScrollStamp = event.timestamp
+        _ = SystemVolume.adjust(by: steps * SystemVolume.step)
+    }
+
     /// Normalized brightness slot, remembering the last one while the glyph is hidden.
     private func currentBrightnessNorm() -> CGRect? {
         guard expanded else { return nil }
@@ -586,6 +616,20 @@ final class PillPanelController: NSObject {
             buffer: buffer
         )
         latchedBrightnessNorm = resolved
+        return resolved
+    }
+
+    /// Normalized volume slot. A dark speaker patch drops it; closing the strip does too.
+    private func currentVolumeNorm() -> CGRect? {
+        guard expanded else { return nil }
+        guard let buffer = copyLumaBuffer() else { return latchedVolumeNorm }
+        let detected = BrightnessGlyph.volumeSlot(in: buffer)
+        let resolved = BrightnessGlyph.latchedSlot(
+            detected: detected,
+            previous: latchedVolumeNorm,
+            buffer: buffer
+        )
+        latchedVolumeNorm = resolved
         return resolved
     }
 
@@ -606,11 +650,11 @@ final class PillPanelController: NSObject {
         if now - brightnessLatchTick < 0.05 { return }
         brightnessLatchTick = now
         _ = currentBrightnessNorm()
+        _ = currentVolumeNorm()
     }
 
-    /// Screen rect of the Control Strip brightness slot, or nil.
-    private func brightnessSlotOnScreen() -> NSRect? {
-        guard let norm = currentBrightnessNorm() else { return nil }
+    /// Screen rect of a normalized stream slot, or nil.
+    private func screenRect(forNorm norm: CGRect) -> NSRect? {
         root.layoutSubtreeIfNeeded()
         let bounds = root.streamView.bounds
         guard bounds.width > 1, bounds.height > 1 else { return nil }
@@ -625,8 +669,23 @@ final class PillPanelController: NSObject {
         return panel.convertToScreen(inWindow)
     }
 
+    private func brightnessSlotOnScreen() -> NSRect? {
+        guard let norm = currentBrightnessNorm() else { return nil }
+        return screenRect(forNorm: norm)
+    }
+
+    private func volumeSlotOnScreen() -> NSRect? {
+        guard let norm = currentVolumeNorm() else { return nil }
+        return screenRect(forNorm: norm)
+    }
+
     private func pointerOverBrightness() -> Bool {
         guard let slot = brightnessSlotOnScreen() else { return false }
+        return slot.contains(NSEvent.mouseLocation)
+    }
+
+    private func pointerOverMirroredVolume() -> Bool {
+        guard let slot = volumeSlotOnScreen() else { return false }
         return slot.contains(NSEvent.mouseLocation)
     }
 

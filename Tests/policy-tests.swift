@@ -105,6 +105,8 @@ enum PolicyTests {
             ZonePolicy.volumeScrollSteps(deltaX: 0, deltaY: 0.1, precise: true, invertedFromDevice: true) == nil,
             "tiny precise delta is ignored"
         )
+        let awayAcross = ZonePolicy.volumeScrollSteps(deltaX: -10, deltaY: 0, precise: true, invertedFromDevice: true)
+        check(awayAcross == away, "horizontal scroll on the mirrored speaker uses the volume-wing sign")
 
         let track = CGRect(x: 10, y: 20, width: 12, height: 80)
         let geometry = ZonePolicy.SliderGeometry(
@@ -319,6 +321,13 @@ enum PolicyTests {
             check(!slot.contains(CGPoint(x: speakerFrac, y: 0.5)), "brightness slot misses the speaker")
             check(slot.maxX < speakerFrac, "slot ends before the volume glyph")
             check(slot.minX > 0.5, "the pair on the right stays on the right")
+            if let volume = BrightnessGlyph.volumeSlot(in: pair) {
+                check(volume.contains(CGPoint(x: speakerFrac, y: 0.5)), "volume slot covers the speaker")
+                check(!volume.contains(CGPoint(x: sunFrac, y: 0.5)), "volume slot misses the sun")
+                check(!slot.intersects(volume), "brightness and volume slots do not overlap")
+            } else {
+                check(false, "speaker beside the sun is the volume slot")
+            }
         } else {
             check(false, "sun beside speaker is the brightness slot")
         }
@@ -329,6 +338,12 @@ enum PolicyTests {
         if let slot = BrightnessGlyph.brightnessSlot(in: swapped) {
             check(slot.contains(CGPoint(x: 860.0 / 1004, y: 0.5)), "a sun to the right of the speaker is still brightness")
             check(!slot.contains(CGPoint(x: 700.0 / 1004, y: 0.5)), "the speaker on the left is outside the slot")
+            if let volume = BrightnessGlyph.volumeSlot(in: swapped) {
+                check(volume.contains(CGPoint(x: 700.0 / 1004, y: 0.5)), "volume slot follows the speaker when it is on the left")
+                check(!volume.contains(CGPoint(x: 860.0 / 1004, y: 0.5)), "volume slot misses the sun on the right")
+            } else {
+                check(false, "swapped order still finds the speaker")
+            }
         } else {
             check(false, "swapped Control Strip order still finds the sun")
         }
@@ -379,6 +394,29 @@ enum PolicyTests {
                 BrightnessGlyph.latchedSlot(detected: slot, previous: nil, buffer: pair) == slot,
                 "a fresh sun replaces an empty latch"
             )
+            if let volume = BrightnessGlyph.volumeSlot(in: pair) {
+                var speakerLit = pair
+                let vx0 = max(0, Int(volume.minX * CGFloat(speakerLit.width)))
+                let vx1 = min(speakerLit.width, Int(volume.maxX * CGFloat(speakerLit.width)))
+                for y in 0..<speakerLit.height {
+                    for x in vx0..<vx1 {
+                        speakerLit.samples[y * speakerLit.width + x] = 210
+                    }
+                }
+                check(BrightnessGlyph.volumeSlot(in: speakerLit) == nil, "a lit volume button hides the speaker")
+                check(
+                    BrightnessGlyph.latchedSlot(detected: nil, previous: volume, buffer: speakerLit) == volume,
+                    "hover keeps the volume slot while that patch stays lit"
+                )
+                var speakerDark = speakerLit
+                for index in speakerDark.samples.indices { speakerDark.samples[index] = 12 }
+                check(
+                    BrightnessGlyph.latchedSlot(detected: nil, previous: volume, buffer: speakerDark) == nil,
+                    "a dark strip drops the remembered volume slot"
+                )
+            } else {
+                check(false, "volume latch test needs a detected speaker")
+            }
         } else {
             check(false, "latch test needs a detected sun")
         }
@@ -391,6 +429,12 @@ enum PolicyTests {
                 check(slot.contains(CGPoint(x: sunFrac, y: 0.5)), "crop sun is inside the brightness slot")
                 check(!slot.contains(CGPoint(x: speakerFrac, y: 0.5)), "crop speaker is outside the brightness slot")
                 check(slot.maxX < speakerFrac, "crop slot stops before the volume glyph")
+                if let volume = BrightnessGlyph.volumeSlot(in: crop) {
+                    check(volume.contains(CGPoint(x: speakerFrac, y: 0.5)), "crop speaker is inside the volume slot")
+                    check(!volume.contains(CGPoint(x: sunFrac, y: 0.5)), "crop sun is outside the volume slot")
+                } else {
+                    check(false, "control-strip crop did not yield a volume slot")
+                }
             } else {
                 check(false, "control-strip crop did not yield a brightness slot (\(path))")
             }

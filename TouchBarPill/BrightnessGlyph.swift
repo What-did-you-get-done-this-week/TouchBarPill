@@ -9,19 +9,43 @@ struct LumaBuffer: Equatable {
     var samples: [UInt8]
 }
 
-/// Locates the Control Strip brightness button in a mirrored Touch Bar frame.
+/// Locates the Control Strip brightness and volume buttons in a mirrored Touch Bar frame.
 ///
 /// The strip is a picture, not a list of controls. This scans that picture for
-/// the display-brightness sun sitting beside the speaker (the pair in the
-/// expanded Control Strip). The slot is one button wide, centered on the sun,
-/// and stops at the midpoint toward the speaker so the volume button is outside
-/// it. Scroll on the volume button is left alone.
+/// the display-brightness sun sitting beside the speaker. Each slot is one
+/// button wide and stops at the midpoint between them, so scroll on one does
+/// not hit the other.
 ///
 /// A missing sun, a sun that is not next to a speaker, or two equally close
 /// pairs returns nil. Callers treat that as a no-op instead of guessing.
 enum BrightnessGlyph {
     /// Normalized image rect. Origin is the top-left; x grows right, y grows down.
+    /// One button wide, centered on the sun, ending at the midpoint toward the speaker.
     static func brightnessSlot(in buffer: LumaBuffer) -> CGRect? {
+        guard let pair = controlPair(in: buffer) else { return nil }
+        return buttonSlot(
+            centerX: pair.sun.midX,
+            pitch: pair.pitch,
+            width: buffer.width,
+            height: buffer.height,
+            excludeX: pair.speaker.midX
+        )
+    }
+
+    /// One button wide, centered on the speaker beside the sun.
+    /// Ends at the midpoint toward the sun so the brightness button is outside it.
+    static func volumeSlot(in buffer: LumaBuffer) -> CGRect? {
+        guard let pair = controlPair(in: buffer) else { return nil }
+        return buttonSlot(
+            centerX: pair.speaker.midX,
+            pitch: pair.pitch,
+            width: buffer.width,
+            height: buffer.height,
+            excludeX: pair.sun.midX
+        )
+    }
+
+    private static func controlPair(in buffer: LumaBuffer) -> Pair? {
         let width = buffer.width
         let height = buffer.height
         guard width >= 16, height >= 8, buffer.samples.count == width * height else { return nil }
@@ -75,11 +99,6 @@ enum BrightnessGlyph {
         let speakers = icons.filter(isSpeaker)
         guard !suns.isEmpty, !speakers.isEmpty else { return nil }
 
-        struct Pair {
-            var sun: Icon
-            var speaker: Icon
-            var pitch: Double
-        }
         var pairs: [Pair] = []
         for sun in suns {
             for speaker in speakers {
@@ -111,19 +130,35 @@ enum BrightnessGlyph {
                 return nil
             }
         }
+        return best
+    }
 
-        let minX = best.sun.midX - best.pitch / 2
+    private struct Pair {
+        var sun: Icon
+        var speaker: Icon
+        var pitch: Double
+    }
+
+    /// One pitch wide, centered on `centerX`, excluding the other glyph's center.
+    private static func buttonSlot(
+        centerX: Double,
+        pitch: Double,
+        width: Int,
+        height: Int,
+        excludeX: Double
+    ) -> CGRect? {
+        let minX = centerX - pitch / 2
         let inset = Double(height) * 0.04
         let rect = CGRect(
             x: minX / Double(width),
             y: inset / Double(height),
-            width: best.pitch / Double(width),
+            width: pitch / Double(width),
             height: (Double(height) - inset * 2) / Double(height)
         )
         let clamped = rect.intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
         guard !clamped.isNull, clamped.width > 0.012, clamped.height > 0.5 else { return nil }
-        let speakerX = best.speaker.midX / Double(width)
-        guard speakerX < clamped.minX - 0.004 || speakerX > clamped.maxX + 0.004 else { return nil }
+        let other = excludeX / Double(width)
+        guard other < clamped.minX - 0.004 || other > clamped.maxX + 0.004 else { return nil }
         return clamped
     }
 
