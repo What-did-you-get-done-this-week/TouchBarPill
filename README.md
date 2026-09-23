@@ -39,7 +39,7 @@ If `xcodebuild` is unavailable (Command Line Tools only), use:
 open build/TouchBarPill.app
 ```
 
-Policy checks (volume scroll sign and leave-collapse) run with the build. Tests only:
+Policy checks (volume scroll sign and leave-collapse) run with the build. Command Line Tools has no XCTest, so the script compiles a small hermetic runner. Tests only:
 
 ```sh
 ./build-cli.sh test
@@ -210,7 +210,7 @@ TouchBarPill/Placement.swift    Display, anchor, pin, discreet opacity
 TouchBarPill/TouchBarStreamView.swift
                                 Pointer forwarding into the strip
 TouchBarPill/ZonePolicy.swift       Collapsed zones, volume scroll sign, leave-collapse
-Tests/TouchBarPillPolicyTests     swift test target used by build-cli.sh
+Tests/policy-tests.swift          Volume sign and leave-collapse checks (`./build-cli.sh test`)
 TouchBarPill/LaunchAtLogin.swift  SMAppService login item
 TouchBarPill/L10n.swift            NSLocalizedString helper
 TouchBarPill/en.lproj/Localizable.strings

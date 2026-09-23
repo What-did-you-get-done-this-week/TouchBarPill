@@ -2,8 +2,19 @@
 # Ad-hoc Release build without Xcode.app (Command Line Tools).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+run_policy_tests() {
+	local sdk out
+	sdk="$(xcrun --show-sdk-path)"
+	out="$ROOT/build/policy-tests"
+	mkdir -p "$ROOT/build"
+	swiftc -sdk "$sdk" -target arm64-apple-macos12.0 \
+		-framework CoreGraphics -framework Foundation \
+		"$ROOT/TouchBarPill/ZonePolicy.swift" "$ROOT/Tests/policy-tests.swift" \
+		-o "$out"
+	"$out"
+}
 if [[ "${1:-}" == "test" ]]; then
-	swift test --package-path "$ROOT"
+	run_policy_tests
 	exit 0
 fi
 SDK="$(xcrun --show-sdk-path)"
@@ -57,7 +68,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
-swift test --package-path "$ROOT"
+run_policy_tests
 
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 cp "$SRC/en.lproj/Localizable.strings" "$RES/en.lproj/"
