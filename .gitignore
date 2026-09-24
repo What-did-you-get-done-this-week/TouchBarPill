@@ -9,3 +9,4 @@ xcuserdata/
 .swiftpm/
 .build/
 releases/*.app/
+*.app/
