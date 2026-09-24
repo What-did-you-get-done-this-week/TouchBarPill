@@ -1,6 +1,6 @@
 # TouchBarPill
 
-**[Download for Mac](https://github.com/What-did-you-get-done-this-week/TouchBarPill/releases/download/v0.5.7/TouchBarPill-0.5.7.zip)** (0.5.7)
+**[Download for Mac](https://github.com/What-did-you-get-done-this-week/TouchBarPill/releases/download/v0.5.8/TouchBarPill-0.5.8.zip)** (0.5.8)
 
 TouchBarPill is a pill that mirrors the Touch Bar when the OLED is dead but input still works.
 
