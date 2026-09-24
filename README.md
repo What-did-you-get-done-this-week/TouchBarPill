@@ -4,6 +4,8 @@ TouchBarPill is a notch for a MacBook whose Touch Bar OLED is dead but still acc
 
 Collapsed, it is a small notch. Hover the center and the live Touch Bar opens. A new install leaves Pin Touch bar off, so the strip closes again when the pointer leaves. The status menu is the settings surface. Open at login stays off until you turn it on.
 
+The clock on the left of the notch is a simple timer. Use it to track focus, or to see how long a task takes. It is experimental, v1. Click the clock to start. The center then shows whole minutes. Pause and stop are on that same wing.
+
 ## What you need
 
 - macOS 12 or later
