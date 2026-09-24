@@ -97,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func buildStatusItem() {
         let image = Self.statusImage()
-        // The mark is a wide pill. Length follows the glyph so the slot stays
+        // The mark is the 2:1 pill. Length follows the glyph so the slot stays
         // readable; the item is still as tall as the menu bar, so the hit target is.
         let item = NSStatusBar.system.statusItem(withLength: max(image.size.width, NSStatusBar.system.thickness))
         item.button?.image = image
