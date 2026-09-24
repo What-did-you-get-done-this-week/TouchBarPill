@@ -22,6 +22,8 @@
 		A10000000000000000000071 /* BrightnessGlyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000070 /* BrightnessGlyph.swift */; };
 		A10000000000000000000073 /* SystemBrightness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000072 /* SystemBrightness.swift */; };
 		A10000000000000000000053 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000050 /* Localizable.strings */; };
+		A10000000000000000000080 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000082 /* Assets.xcassets */; };
+		A10000000000000000000081 /* MenuBarTemplate.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000083 /* MenuBarTemplate.png */; };
 		A10000000000000000000041 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000040 /* AppKit.framework */; };
 		A10000000000000000000043 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000042 /* QuartzCore.framework */; };
 		A10000000000000000000045 /* CoreImage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000044 /* CoreImage.framework */; };
@@ -51,6 +53,8 @@
 		A10000000000000000000072 /* SystemBrightness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemBrightness.swift; sourceTree = "<group>"; };
 		A10000000000000000000051 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		A10000000000000000000052 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/Localizable.strings; sourceTree = "<group>"; };
+		A10000000000000000000082 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A10000000000000000000083 /* MenuBarTemplate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = MenuBarTemplate.png; sourceTree = "<group>"; };
 		A10000000000000000000040 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		A10000000000000000000042 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		A10000000000000000000044 /* CoreImage.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreImage.framework; path = System/Library/Frameworks/CoreImage.framework; sourceTree = SDKROOT; };
@@ -117,6 +121,8 @@
 				A10000000000000000000027 /* TouchBarPill-Bridging-Header.h */,
 				A10000000000000000000028 /* Info.plist */,
 				A10000000000000000000029 /* TouchBarPill.entitlements */,
+				A10000000000000000000082 /* Assets.xcassets */,
+				A10000000000000000000083 /* MenuBarTemplate.png */,
 			);
 			path = TouchBarPill;
 			sourceTree = "<group>";
@@ -189,6 +195,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000053 /* Localizable.strings in Resources */,
+				A10000000000000000000080 /* Assets.xcassets in Resources */,
+				A10000000000000000000081 /* MenuBarTemplate.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -335,8 +343,9 @@
 				CODE_SIGN_STYLE = Manual;
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXECUTABLE_NAME = "$(PRODUCT_NAME)";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -346,7 +355,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
-				MARKETING_VERSION = 0.5.6;
+				MARKETING_VERSION = 0.5.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.touchbarpill.TouchBarPill;
 				PRODUCT_BUNDLE_PACKAGE_TYPE = APPL;
 				PRODUCT_MODULE_NAME = TouchBarPill;
@@ -367,8 +376,9 @@
 				CODE_SIGN_STYLE = Manual;
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				ENABLE_HARDENED_RUNTIME = NO;
 				EXECUTABLE_NAME = "$(PRODUCT_NAME)";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -378,7 +388,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
-				MARKETING_VERSION = 0.5.6;
+				MARKETING_VERSION = 0.5.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.touchbarpill.TouchBarPill;
 				PRODUCT_BUNDLE_PACKAGE_TYPE = APPL;
 				PRODUCT_MODULE_NAME = TouchBarPill;

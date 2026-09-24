@@ -43,6 +43,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 	<string>TouchBarPill</string>
 	<key>CFBundleExecutable</key>
 	<string>TouchBarPill</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.touchbarpill.TouchBarPill</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -52,9 +54,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.5.6</string>
+	<string>0.5.7</string>
 	<key>CFBundleVersion</key>
-	<string>23</string>
+	<string>24</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>12.0</string>
 	<key>LSMultipleInstancesProhibited</key>
@@ -75,6 +77,12 @@ run_policy_tests
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 cp "$SRC/en.lproj/Localizable.strings" "$RES/en.lproj/"
 cp "$SRC/es.lproj/Localizable.strings" "$RES/es.lproj/"
+cp "$SRC/MenuBarTemplate.png" "$RES/MenuBarTemplate.png"
+ICONSET="$ROOT/build/AppIcon.iconset"
+rm -rf "$ICONSET"
+mkdir -p "$ICONSET"
+cp "$SRC/Assets.xcassets/AppIcon.appiconset"/icon_*.png "$ICONSET/"
+iconutil -c icns "$ICONSET" -o "$RES/AppIcon.icns"
 
 clang -c -fobjc-arc -fmodules -mmacosx-version-min=12.0 -isysroot "$SDK" -I"$SRC" \
   "$SRC/DFRMirror.m" -o "$OBJ/DFRMirror.o"

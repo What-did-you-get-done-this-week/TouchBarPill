@@ -96,8 +96,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func buildStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = Self.statusImage()
+        let image = Self.statusImage()
+        // The mark is a wide pill. Length follows the glyph so the slot stays
+        // readable; the item is still as tall as the menu bar, so the hit target is.
+        let item = NSStatusBar.system.statusItem(withLength: max(image.size.width, NSStatusBar.system.thickness))
+        item.button?.image = image
+        item.button?.imageScaling = .scaleProportionallyDown
         item.button?.imagePosition = .imageOnly
         item.button?.toolTip = L("TouchBarPill — click to quit")
 
@@ -563,18 +567,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         """
     }
 
+    /// Monochrome pill from MenuBarTemplate.png. Template images ignore color
+    /// and follow the menu bar's light or dark tint. The orange Dock mark is not used here.
     private static func statusImage() -> NSImage {
-        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
-            NSColor.black.setStroke()
-            let capsule = NSBezierPath(roundedRect: NSRect(x: 1.5, y: 5.5, width: 15, height: 7), xRadius: 3.5, yRadius: 3.5)
-            capsule.lineWidth = 1.5
-            capsule.stroke()
-            NSColor.black.setFill()
-            for x in [4.0, 8.0, 12.0] {
-                NSBezierPath(ovalIn: NSRect(x: x, y: 7.5, width: 3, height: 3)).fill()
-            }
-            return true
+        let image: NSImage
+        if let url = Bundle.main.url(forResource: "MenuBarTemplate", withExtension: "png"),
+           let loaded = NSImage(contentsOf: url) {
+            image = loaded
+        } else {
+            image = NSImage(size: NSSize(width: 22, height: 15))
         }
+        let aspect = image.size.width / max(image.size.height, 1)
+        // 15pt leaves a margin inside the 22pt menu bar and keeps the inner slot visible.
+        let height: CGFloat = 15
+        let width = (height * aspect).rounded(.toNearestOrAwayFromZero)
+        image.size = NSSize(width: max(width, 22), height: height)
         image.isTemplate = true
         return image
     }
