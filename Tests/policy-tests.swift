@@ -309,6 +309,35 @@ enum PolicyTests {
             "tiny brightness scroll is ignored"
         )
 
+        let idleTrace = BrightnessScrollTrace()
+        check(
+            idleTrace.line(now: 10) == "BrightnessScroll: no scroll received; brightnessWrite none",
+            "diagnostics say when no brightness scroll has arrived"
+        )
+        var trace = BrightnessScrollTrace()
+        trace.receivedAt = 8
+        trace.scrollingDX = 0
+        trace.scrollingDY = -6.1
+        trace.lineDX = 0
+        trace.lineDY = -0.8
+        trace.precise = true
+        trace.phase = "changed"
+        trace.momentum = "none"
+        trace.hit = "brightness"
+        trace.steps = 0.76
+        trace.write = "84%"
+        let scrollLine = trace.line(now: 10)
+        check(scrollLine.contains("2.00s ago"), "diagnostics age the last brightness scroll")
+        check(scrollLine.contains("scroll (0.0, -6.1)"), "diagnostics keep the scroll deltas")
+        check(scrollLine.contains("line (0.0, -0.8)"), "diagnostics keep the line deltas")
+        check(scrollLine.contains("hit brightness"), "diagnostics record a brightness hit")
+        check(scrollLine.contains("steps 0.76"), "diagnostics record the step that was applied")
+        check(scrollLine.contains("brightnessWrite 84%"), "diagnostics record the brightness write")
+        trace.steps = nil
+        trace.write = "failed"
+        check(trace.line(now: 10).contains("steps ignored"), "a scroll below the threshold is ignored in the log")
+        check(trace.line(now: 10).contains("brightnessWrite failed"), "a failed brightness write is visible in the log")
+
         check(BrightnessGlyph.brightnessSlot(in: LumaBuffer(width: 80, height: 30, samples: [UInt8](repeating: 0, count: 80 * 30))) == nil, "a blank strip does not scroll brightness")
         var sunOnly = GlyphCanvas.blank(400, 60)
         GlyphCanvas.sun(&sunOnly, cx: 300, cy: 30, radius: 16)
@@ -396,7 +425,33 @@ enum PolicyTests {
             for index in dark.samples.indices { dark.samples[index] = 12 }
             check(
                 BrightnessGlyph.latchedSlot(detected: nil, previous: slot, buffer: dark) == nil,
-                "a dark strip drops the remembered slot"
+                "a dark strip drops the remembered slot once the pointer has left"
+            )
+            check(
+                BrightnessGlyph.latchedSlot(detected: nil, previous: slot, buffer: dark, pointerInsidePrevious: true) == slot,
+                "a dark frame keeps the brightness slot while the pointer stays on the button"
+            )
+            var grayHover = pair
+            for y in 0..<grayHover.height {
+                for x in x0..<x1 {
+                    grayHover.samples[y * grayHover.width + x] = 96
+                }
+            }
+            check(BrightnessGlyph.brightnessSlot(in: grayHover) == nil, "a gray hover hides the sun")
+            let heldGray = BrightnessGlyph.latchedSlot(detected: nil, previous: slot, buffer: grayHover)
+            check(heldGray == slot, "a gray hover keeps the brightness slot without near-white ink")
+            // The failure that came and went: one dark sample cleared the latch, and the
+            // following hover had no sun to detect, so scrolling did nothing until the icon returned.
+            let forgotten = BrightnessGlyph.latchedSlot(detected: nil, previous: slot, buffer: dark, pointerInsidePrevious: true)
+            let stillThere = BrightnessGlyph.latchedSlot(
+                detected: BrightnessGlyph.brightnessSlot(in: grayHover),
+                previous: forgotten,
+                buffer: grayHover
+            )
+            check(stillThere == slot, "a dark sample does not make the next hover forget the button")
+            check(
+                BrightnessGlyph.latchedSlot(detected: nil, previous: nil, buffer: grayHover, pointerInsidePrevious: true) == nil,
+                "a gray frame cannot invent a brightness slot"
             )
             check(
                 BrightnessGlyph.latchedSlot(detected: slot, previous: nil, buffer: pair) == slot,

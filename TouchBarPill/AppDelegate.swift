@@ -501,7 +501,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func copyDiagnostics() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(Self.diagnosticsText(mirror: mirror), forType: .string)
+        NSPasteboard.general.setString(
+            Self.diagnosticsText(mirror: mirror, brightnessScroll: pill.brightnessScrollDiagnosticLine()),
+            forType: .string
+        )
     }
 
     private static func brightnessDiagnostic() -> String {
@@ -511,7 +514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return "unavailable (DisplayServices / built-in display)"
     }
 
-    static func diagnosticsText(mirror: DFRMirror) -> String {
+    static func diagnosticsText(mirror: DFRMirror, brightnessScroll: String) -> String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
         let screens = NSScreen.screens.enumerated().map { index, screen in
@@ -556,6 +559,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         RevealDelay: \(String(format: "%.2f", PillPlacement.revealDelay)) FullscreenHideDelay: \(String(format: "%.2f", PillPlacement.fullscreenHideDelay))
         Focus: phase \(String(describing: FocusSession.shared.phase)) elapsed \(String(format: "%.0f", FocusSession.shared.displayElapsed))s label \(FocusSession.shared.notchLabel)
         Brightness: \(Self.brightnessDiagnostic())
+        \(brightnessScroll)
         Fullscreen: \(FullscreenWatcher.shared.diagnosticToken)
         Invisible: \(PillPlacement.cinemaMode ? "on" : "off")
         CinemaCoverage: \(String(format: "%.0f%%", Double(FullscreenWatcher.shared.frontCoverage * 100)))

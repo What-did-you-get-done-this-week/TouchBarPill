@@ -91,6 +91,7 @@ final class PillPanelController: NSObject {
     /// Last Control Strip volume slot. Same lifetime as the brightness slot.
     private var latchedVolumeNorm: CGRect?
     private var brightnessLatchTick: TimeInterval = 0
+    private var brightnessScrollTrace = BrightnessScrollTrace()
     private var animating = false
     private var hovering = false
     private var dragging = false
@@ -193,7 +194,12 @@ final class PillPanelController: NSObject {
                     self.scrollExpandedVolume(event)
                     return nil
                 }
-                guard self.pointerOverBrightness() else { return event }
+                guard self.pointerOverBrightness() else {
+                    if self.panel.frame.contains(NSEvent.mouseLocation) {
+                        self.noteBrightnessScroll(event, hit: "miss", steps: nil, write: nil)
+                    }
+                    return event
+                }
                 self.scrollExpandedBrightness(event)
                 return nil
             }
@@ -577,16 +583,34 @@ final class PillPanelController: NSObject {
     /// Up and right raise brightness. Down and left lower it. Same helper as volume.
     /// A sun that cannot be told apart from the speaker is a no-op.
     private func scrollExpandedBrightness(_ event: NSEvent) {
-        guard expanded, pointerOverBrightness() else { return }
+        guard expanded else { return }
+        guard pointerOverBrightness() else {
+            if panel.frame.contains(NSEvent.mouseLocation) {
+                noteBrightnessScroll(event, hit: "miss", steps: nil, write: nil)
+            }
+            return
+        }
         guard let steps = ZonePolicy.brightnessScrollSteps(
             deltaX: event.scrollingDeltaX,
             deltaY: event.scrollingDeltaY,
             precise: event.hasPreciseScrollingDeltas,
             invertedFromDevice: event.isDirectionInvertedFromDevice
-        ) else { return }
-        if event.timestamp == lastScrollStamp { return }
+        ) else {
+            noteBrightnessScroll(event, hit: "brightness", steps: nil, write: nil)
+            return
+        }
+        if event.timestamp == lastScrollStamp {
+            noteBrightnessScroll(event, hit: "brightness", steps: steps, write: nil)
+            return
+        }
         lastScrollStamp = event.timestamp
-        _ = SystemBrightness.adjust(by: steps * SystemBrightness.step)
+        let write: String
+        if let level = SystemBrightness.adjust(by: steps * SystemBrightness.step) {
+            write = String(format: "%.0f%%", level * 100)
+        } else {
+            write = "failed"
+        }
+        noteBrightnessScroll(event, hit: "brightness", steps: steps, write: write)
     }
 
     /// Scroll on the mirrored Control Strip speaker. Clicks still go to the simulator.
@@ -599,10 +623,52 @@ final class PillPanelController: NSObject {
             deltaY: event.scrollingDeltaY,
             precise: event.hasPreciseScrollingDeltas,
             invertedFromDevice: event.isDirectionInvertedFromDevice
-        ) else { return }
-        if event.timestamp == lastScrollStamp { return }
+        ) else {
+            noteBrightnessScroll(event, hit: "volume", steps: nil, write: nil)
+            return
+        }
+        if event.timestamp == lastScrollStamp {
+            noteBrightnessScroll(event, hit: "volume", steps: steps, write: nil)
+            return
+        }
         lastScrollStamp = event.timestamp
         _ = SystemVolume.adjust(by: steps * SystemVolume.step)
+        // Leave `write` as the last brightness result. `hit volume` shows this
+        // scroll was taken by the speaker beside the sun.
+        noteBrightnessScroll(event, hit: "volume", steps: steps, write: nil)
+    }
+
+    /// One line for Copy Diagnostics: the last scroll that reached the expanded
+    /// strip, and the last brightness write.
+    func brightnessScrollDiagnosticLine() -> String {
+        brightnessScrollTrace.line(now: ProcessInfo.processInfo.systemUptime)
+    }
+
+    private func noteBrightnessScroll(_ event: NSEvent, hit: String, steps: Float?, write: String?) {
+        brightnessScrollTrace.receivedAt = ProcessInfo.processInfo.systemUptime
+        brightnessScrollTrace.scrollingDX = event.scrollingDeltaX
+        brightnessScrollTrace.scrollingDY = event.scrollingDeltaY
+        brightnessScrollTrace.lineDX = event.deltaX
+        brightnessScrollTrace.lineDY = event.deltaY
+        brightnessScrollTrace.precise = event.hasPreciseScrollingDeltas
+        brightnessScrollTrace.phase = Self.phaseName(event.phase)
+        brightnessScrollTrace.momentum = Self.phaseName(event.momentumPhase)
+        brightnessScrollTrace.hit = hit
+        brightnessScrollTrace.steps = steps
+        if let write {
+            brightnessScrollTrace.write = write
+        }
+    }
+
+    private static func phaseName(_ phase: NSEvent.Phase) -> String {
+        var names: [String] = []
+        if phase.contains(.began) { names.append("began") }
+        if phase.contains(.stationary) { names.append("stationary") }
+        if phase.contains(.changed) { names.append("changed") }
+        if phase.contains(.ended) { names.append("ended") }
+        if phase.contains(.cancelled) { names.append("cancelled") }
+        if phase.contains(.mayBegin) { names.append("mayBegin") }
+        return names.isEmpty ? "none" : names.joined(separator: "+")
     }
 
     /// Normalized brightness slot, remembering the last one while the glyph is hidden.
@@ -610,13 +676,24 @@ final class PillPanelController: NSObject {
         guard expanded else { return nil }
         guard let buffer = copyLumaBuffer() else { return latchedBrightnessNorm }
         let detected = BrightnessGlyph.brightnessSlot(in: buffer)
+        let pointerInside = detected == nil && pointerInsideLatchedBrightness()
         let resolved = BrightnessGlyph.latchedSlot(
             detected: detected,
             previous: latchedBrightnessNorm,
-            buffer: buffer
+            buffer: buffer,
+            pointerInsidePrevious: pointerInside
         )
         latchedBrightnessNorm = resolved
         return resolved
+    }
+
+    /// True when the cursor is still on the brightness button we already found.
+    /// Used so a frame that hides the sun does not drop that button.
+    private func pointerInsideLatchedBrightness() -> Bool {
+        guard let previous = latchedBrightnessNorm, let rect = screenRect(forNorm: previous) else {
+            return false
+        }
+        return rect.contains(NSEvent.mouseLocation)
     }
 
     /// Normalized volume slot. A dark speaker patch drops it; closing the strip does too.
