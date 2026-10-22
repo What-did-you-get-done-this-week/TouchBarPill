@@ -534,3 +534,43 @@ enum ZonePolicy {
         min(max(value, 0), 1)
     }
 }
+
+/// Last brightness-scroll attempt, for the diagnostics paste.
+/// Plain data so the line can be checked without AppKit.
+struct BrightnessScrollTrace: Equatable {
+    var receivedAt: TimeInterval = -1
+    var scrollingDX: CGFloat = 0
+    var scrollingDY: CGFloat = 0
+    var lineDX: CGFloat = 0
+    var lineDY: CGFloat = 0
+    var precise = false
+    var phase = "none"
+    var momentum = "none"
+    /// `brightness`, `volume`, or `miss`.
+    var hit = "none"
+    var steps: Float?
+    /// Last DisplayServices write: a percent, `failed`, or `none`.
+    var write = "none"
+
+    func line(now: TimeInterval) -> String {
+        guard receivedAt >= 0 else {
+            return "BrightnessScroll: no scroll received; brightnessWrite \(write)"
+        }
+        let age = max(0, now - receivedAt)
+        let stepsText = steps.map { String(format: "%.2f", Double($0)) } ?? "ignored"
+        return String(
+            format: "BrightnessScroll: %.2fs ago scroll (%.1f, %.1f) line (%.1f, %.1f) precise %@ phase %@ momentum %@ hit %@ steps %@ brightnessWrite %@",
+            age,
+            Double(scrollingDX),
+            Double(scrollingDY),
+            Double(lineDX),
+            Double(lineDY),
+            precise ? "yes" : "no",
+            phase,
+            momentum,
+            hit,
+            stepsText,
+            write
+        )
+    }
+}

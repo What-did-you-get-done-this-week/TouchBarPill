@@ -166,16 +166,32 @@ enum BrightnessGlyph {
     ///
     /// Hovering the brightness button (and the system control that replaces it)
     /// wipes the sun and speaker out of the frame, so a fresh scan returns nil
-    /// exactly when the pointer is on that button. Keep the last slot when the
-    /// same patch of the picture is still lit. A dark patch means the strip
-    /// moved on; drop it instead of scrolling whatever landed there.
-    static func latchedSlot(detected: CGRect?, previous: CGRect?, buffer: LumaBuffer) -> CGRect? {
+    /// exactly when the pointer is on that button. Keep the last slot when that
+    /// patch is still lit, including a gray hover that is not near-white.
+    /// A dark frame must not forget the button while the pointer is still on
+    /// it: later frames often have no sun to re-detect, so one dark sample used
+    /// to kill scrolling until the icon happened to come back. Once the pointer
+    /// has left, a dark patch means the strip moved on.
+    static func latchedSlot(
+        detected: CGRect?,
+        previous: CGRect?,
+        buffer: LumaBuffer,
+        pointerInsidePrevious: Bool = false
+    ) -> CGRect? {
         if let detected { return detected }
-        guard let previous, slotStillMarked(previous, in: buffer) else { return nil }
-        return previous
+        guard let previous else { return nil }
+        if pointerInsidePrevious || slotStillMarked(previous, in: buffer) {
+            return previous
+        }
+        return nil
     }
 
     /// Icon or highlight ink still occupies the latched button.
+    ///
+    /// Near-white glyph pixels count. So does a gray hover wash sitting above
+    /// the strip background: the Control Strip highlight is often well below
+    /// white, and treating that as "the button left" dropped the latch for the
+    /// rest of the hover.
     static func slotStillMarked(_ slot: CGRect, in buffer: LumaBuffer) -> Bool {
         let width = buffer.width
         let height = buffer.height
@@ -186,16 +202,38 @@ enum BrightnessGlyph {
         let x1 = max(x0, min(width - 1, Int((clamped.maxX * CGFloat(width)).rounded(.up)) - 1))
         let y0 = max(0, min(height - 1, Int((clamped.minY * CGFloat(height)).rounded(.down))))
         let y1 = max(y0, min(height - 1, Int((clamped.maxY * CGFloat(height)).rounded(.up)) - 1))
+        let wash = backgroundLuma(buffer) + 36
         var bright = 0
+        var lifted = 0
         var count = 0
         for y in y0...y1 {
             let row = y * width
             for x in x0...x1 {
                 count += 1
-                if buffer.samples[row + x] >= 140 { bright += 1 }
+                let sample = Int(buffer.samples[row + x])
+                if sample >= 140 { bright += 1 }
+                if sample >= wash { lifted += 1 }
             }
         }
-        return bright >= 24 && bright * 50 >= count
+        guard count > 0 else { return false }
+        if bright >= 24 && bright * 50 >= count { return true }
+        return lifted >= 24 && lifted * 50 >= count
+    }
+
+    /// 40th percentile. Icons are a small fraction of the strip, so this is the
+    /// background the hover wash has to rise above.
+    private static func backgroundLuma(_ buffer: LumaBuffer) -> Int {
+        var hist = [Int](repeating: 0, count: 256)
+        for sample in buffer.samples {
+            hist[Int(sample)] += 1
+        }
+        let target = max(1, buffer.samples.count * 40 / 100)
+        var seen = 0
+        for value in 0..<256 {
+            seen += hist[value]
+            if seen >= target { return value }
+        }
+        return 0
     }
 
     private struct Icon {
